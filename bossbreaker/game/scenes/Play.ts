@@ -3,7 +3,7 @@ import { game } from '../engine.js';
 import { battle, cardIndex, discard, endTurn, execute, FOES, initBattle, queueCard, queueSelected, stepBattle } from '../arena.js';
 import { endRun, ROOMS, run } from '../run.js';
 import { padReader } from '../input.js';
-import { ACTION_Y, drawArena, HAND_X, HAND_Y, SLOT_X, SLOT_Y } from '../ui/arenaView.js';
+import { ACTION_Y, drawArena, HAND_X, HAND_Y, SLOT_X, SLOT_Y, stageTargetAt } from '../ui/arenaView.js';
 import { chapter, HOT, label, topButtons } from '../ui/chrome.js';
 
 const nearest = (x: number, xs: readonly number[], half: number): number => xs.findIndex(value => Math.abs(x-value) <= half);
@@ -107,7 +107,7 @@ export const Play = {
                         continue;
                     }
                     if (battle.phase !== 'plan') continue;
-                    const foe = battle.foes.findIndex(f => f.hp > 0 && Math.hypot(f.x-p.x,f.y-p.y) < Math.max(56,FOES[f.id].size/2));
+                    const foe = stageTargetAt(p.x,p.y);
                     if (foe >= 0 && Math.hypot(p.x-p.startX,p.y-p.startY) < 25) {
                         battle.target = foe;
                         const enemy = battle.foes[foe];

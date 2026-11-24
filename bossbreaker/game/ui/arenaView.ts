@@ -1,7 +1,7 @@
 import { reaction } from '../elements.js';
 import { stacks } from '../status.js';
 import { game } from '../engine.js';
-import { angle, battle, cardIndex, FIELD, FOES, RUNES, maxCapacity, usedCapacity, type Effect, type Zone } from '../arena.js';
+import { angle, battle, cardIndex, FOES, maxCapacity, usedCapacity, type Effect, type Point, type Zone } from '../arena.js';
 import { CARDS, MAX_HP, PIPS, cardLevel, cardSize, run } from '../run.js';
 import { GOLD, HOT, INK, label, LOW, sprite } from './chrome.js';
 
@@ -16,16 +16,62 @@ export const ACTION_Y = 1238;
 export const HAND_X = [92,226,360,494,628];
 export const SLOT_X = [92,226,360,494,628];
 
+// Presentation coordinates are independent of combat-space positions and collisions.
+export const HERO_STAGE = { x: 140, y: 482 };
+export function foeStage(index: number): Point {
+    return { x: battle.foes.length === 1 ? 510 : 425 + index * 165, y: 472 };
+}
+export function foeStageSize(index: number): number {
+    return ['knight','lich','overlord'].includes(battle.foes[index].id) ? 248 : 174;
+}
+export function stageTargetAt(x: number, y: number): number {
+    return battle.foes.findIndex((foe, i) => {
+        const at = foeStage(i), size = foeStageSize(i);
+        return foe.hp > 0 && Math.abs(x-at.x) <= size*0.46 && Math.abs(y-at.y) <= size*0.5;
+    });
+}
+// Smoothly transport combat-space particles between the actor anchors. This only
+// changes where effects are drawn; their timing and collision remain in arena.ts.
+function stagePoint(point: Point): Point {
+    const anchors = [{ logical: battle.hero, visual: HERO_STAGE }, ...battle.foes.map((foe,i) => ({logical:foe,visual:foeStage(i)}))];
+    let total = 0, dx = 0, dy = 0;
+    for (const anchor of anchors) {
+        const distance2 = (point.x-anchor.logical.x)**2 + (point.y-anchor.logical.y)**2;
+        const weight = 1 / Math.max(1,distance2);
+        total += weight;
+        dx += (anchor.visual.x-anchor.logical.x)*weight;
+        dy += (anchor.visual.y-anchor.logical.y)*weight;
+    }
+    return {x:point.x+dx/total,y:point.y+dy/total};
+}
+
 export function drawArena() {
-    const arenaArt = sprite('arena-'+run.floor,360,450,684,0,'arena-floor');
+    const stage = game.graphics({ layer:'hud', width:720, height:600, x:360, y:430 });
+    stage.handle.z = 0;
+    stage.draw(c => {
+        const palette = run.floor === 3 ? ['#291922','#62413a','#a85737'] : run.floor === 2 ? ['#171d31','#36435a','#648da1'] : ['#201b28','#4b4050','#ad805f'];
+        const sky = c.createLinearGradient(0,0,0,600);
+        sky.addColorStop(0,palette[0]); sky.addColorStop(0.75,palette[1]); sky.addColorStop(1,'#17131d');
+        c.fillStyle=sky; c.fillRect(18,20,684,560);
+        for (let x=35;x<700;x+=130) {
+            c.fillStyle='#100e1b99'; c.fillRect(x,45,82,340);
+            c.beginPath(); c.arc(x+41,45,41,Math.PI,0); c.fill();
+            c.fillStyle=palette[2]; c.globalAlpha=0.28; c.fillRect(x+12,68,58,245); c.globalAlpha=1;
+            c.fillStyle='#1b1722'; c.fillRect(x-8,40,12,360); c.fillRect(x+78,40,12,360);
+        }
+        c.fillStyle='#18141e'; c.fillRect(18,407,684,150);
+        c.fillStyle='#49373c'; c.fillRect(18,405,684,10);
+        c.strokeStyle='#665056'; c.lineWidth=3;
+        for(let y=435;y<565;y+=36) { c.beginPath(); c.moveTo(18,y); c.lineTo(702,y); c.stroke(); }
+        c.strokeStyle='#bc8e68'; c.strokeRect(19,20,682,558);
+    });
     const markerInk = game.graphics({ layer:'hud', width:720, height:612, x:360, y:442 });
     markerInk.handle.z = 1;
-    const gate = sprite('gate',360,203,124,2,'arena-door');
-    game.tween.from(gate,{y:181},{duration:0.25,ease:'easeOutQuad'});
-    const actor = sprite('player',battle.hero.x,battle.hero.y,91,3,'hero');
-    const enemies = battle.foes.map(f => {
-        const art = sprite(f.id,f.x,f.y,FOES[f.id].size,3,'foe-'+f.id);
-        const bar = game.bars.create({ x:f.x,y:f.y+FOES[f.id].size*0.37,width:FOES[f.id].size*0.75,height:9,
+    const actor = sprite('player',HERO_STAGE.x,HERO_STAGE.y,144,3,'hero');
+    const enemies = battle.foes.map((f,i) => {
+        const at = foeStage(i), size = foeStageSize(i);
+        const art = sprite(f.id,at.x,at.y,size,3,'foe-'+f.id);
+        const bar = game.bars.create({ x:at.x,y:at.y+size*0.42,width:Math.min(150,size*0.75),height:9,
             style:'retro', fill:FOES[f.id].color,max:f.max,ghost:true,z:4 });
         return { art, bar };
     });
@@ -94,8 +140,7 @@ export function drawArena() {
         const planning = phase === 'plan';
         const aiming = phase === 'execute' || phase === 'enemy';
         const clear = phase === 'clear';
-        gate.setFrame(clear ? 1 : 0);
-        arenaArt.alpha = phase === 'lost' ? 0.65 : 1;
+        stage.handle.alpha = phase === 'lost' ? 0.65 : 1;
         vital.text = run.hp+' / '+run.maxHp;
         health.value = run.hp;
         if (lead && bossHealth) bossHealth.value = lead.hp;
@@ -105,20 +150,21 @@ export function drawArena() {
         counts.text = 'DRAW '+battle.draw.length+'  ·  SPENT '+battle.spent.length;
         const lunge = phase === 'execute' && (battle.resolving === 'Slash' || battle.resolving === 'Dash Strike')
             ? Math.sin(Math.PI * battle.cast / 0.18) * 115 : 0;
-        actor.x = battle.hero.x + Math.cos(battle.aim)*lunge;
-        actor.y = battle.hero.y + Math.sin(time*7)*2 + Math.sin(battle.aim)*lunge;
-        actor.sx = Math.cos(battle.aim) < -0.2 ? -1 : 1;
+        actor.x = HERO_STAGE.x + lunge;
+        actor.y = HERO_STAGE.y + Math.sin(time*7)*2;
+        actor.sx = 1;
         actor.sy = 1 - battle.cast*0.7;
         enemies.forEach(({art,bar},i) => {
             const f = battle.foes[i];
             const visible = f.hp > 0 || f.flash > 0;
             art.visible = visible;
-            art.x = f.x + Math.sin(time*74)*f.flash*27;
-            art.y = f.y + Math.sin(time*(f.id==='lich' ? 5 : 3)+i)*4;
+            const at = foeStage(i), size = foeStageSize(i);
+            art.x = at.x + Math.sin(time*74)*f.flash*27;
+            art.y = at.y + Math.sin(time*(f.id==='lich' ? 5 : 3)+i)*4;
             art.tint = f.flash > 0 ? '#ffffff' : stacks(f.statuses,'chill') ? '#a4deff' : '#ffffff';
             art.alpha = f.hp > 0 ? (f.flash > 0 && Math.sin(time*95)>0 ? 0.62 : 1) : f.flash*5;
-            art.scale = 1 + f.flash*0.43;
-            bar.x = f.x; bar.y = f.y+FOES[f.id].size*0.38; bar.value = f.hp; bar.visible = visible;
+            art.scale = 1 + f.flash*0.25;
+            bar.x = at.x; bar.y = at.y+size*0.42; bar.value = f.hp; bar.visible = visible;
         });
         targetButtons.forEach(({art,title,hp},i) => {
             const foe = battle.foes[i];
@@ -245,52 +291,42 @@ export function drawArena() {
         markerInk.clear();
         markerInk.draw(c => {
             c.save(); c.translate(0,-136);
-            c.beginPath(); c.rect(FIELD.left,FIELD.top,FIELD.right-FIELD.left,FIELD.bottom-FIELD.top); c.clip();
-            if (run.room === 'cursed' || run.floor === 3 && run.room === 'boss') {
-                for (const q of RUNES) {
-                    c.save(); c.translate(q.x,q.y); c.rotate(Math.PI/4);
-                    c.fillStyle='#291e36'; c.fillRect(-28,-28,56,56);
-                    c.strokeStyle='#ad6bd6'; c.lineWidth=2;
-                    c.strokeRect(-24,-24,48,48); c.strokeRect(-14,-14,28,28);
-                    c.restore();
+            c.fillStyle = '#0a0910aa';
+            c.beginPath(); c.ellipse(HERO_STAGE.x,HERO_STAGE.y+64,58,13,0,0,TAU); c.fill();
+            battle.foes.forEach((foe,i) => {
+                if (foe.hp <= 0) return;
+                const at = foeStage(i), size = foeStageSize(i);
+                c.fillStyle = '#0a0910aa'; c.beginPath(); c.ellipse(at.x,at.y+size*0.43,size*0.34,12,0,0,TAU); c.fill();
+                if (planning && battle.target === i) {
+                    c.strokeStyle='#ffdc94'; c.lineWidth=3; c.beginPath(); c.ellipse(at.x,at.y+size*0.43,size*0.39,16,0,0,TAU); c.stroke();
                 }
-            }
-            const target = battle.foes[battle.target];
-            if (planning && target && target.hp > 0) { c.strokeStyle='#ffdc94'; c.lineWidth=3; c.beginPath(); c.arc(target.x,target.y,FOES[target.id].size*0.56,0,TAU); c.stroke(); }
-            for (const f of battle.foes) {
-                if (f.hp <= 0) continue;
-                c.fillStyle = '#12101bbc';
-                c.beginPath(); c.ellipse(f.x,f.y+FOES[f.id].size*0.23,FOES[f.id].size*0.38,FOES[f.id].size*0.10,0,0,TAU);c.fill();
-            }
-            c.fillStyle = '#12101bdc';
-            c.beginPath();c.ellipse(battle.hero.x,battle.hero.y+22,26,8,0,0,TAU);c.fill();
+            });
             c.restore();
         });
         fpsInk.clear();
         fpsInk.draw(c => {
             c.save(); c.translate(0,-136);
-            if (battle.barrier) circle(c,battle.hero.x,battle.hero.y,37+Math.sin(time*7)*2,'#ace8ef','#85dcec',0.27);
+            if (battle.barrier) circle(c,HERO_STAGE.x,HERO_STAGE.y,66+Math.sin(time*7)*2,'#ace8ef','#85dcec',0.27);
             battle.shots.forEach(s => {
+                const at=stagePoint(s), previous=stagePoint({x:s.x-s.aim.x*28,y:s.y-s.aim.y*28});
                 c.lineCap = 'round'; c.lineWidth = s.card==='fire' ? 15 : 8; c.strokeStyle = CARDS[s.card].color;
-                c.beginPath(); c.moveTo(s.x-s.aim.x*28,s.y-s.aim.y*28); c.lineTo(s.x,s.y); c.stroke();
-                circle(c,s.x,s.y,8,'#fff1cf',CARDS[s.card].color,0.95);
+                c.beginPath(); c.moveTo(previous.x,previous.y); c.lineTo(at.x,at.y); c.stroke();
+                circle(c,at.x,at.y,8,'#fff1cf',CARDS[s.card].color,0.95);
             });
-            battle.foes.filter(f => f.id === 'lich' && f.hp > 0).forEach(f => {
-                for (let i=0;i<3;i++) {
-                    const a = time*2+i*TAU/3;
-                    const x = f.x+Math.cos(a)*77,y=f.y+Math.sin(a)*41;
-                    c.fillStyle='#99eafa';c.fillRect(x-4,y-8,8,16);
-                }
-            });
-            for (const fx of battle.effects) paintEffect(c,fx);
+            for (const fx of battle.effects) {
+                const at=stagePoint(fx);
+                const end = fx.kind === 'dash' && fx.end ? stagePoint(fx.end) : fx.end;
+                paintEffect(c,{...fx,...at,end,angle:fx.kind === 'slash' ? 0 : fx.angle});
+            }
             c.restore();
         });
         for (const fx of battle.effects) if (fx.text && !feedback.has(fx)) {
-            feedback.set(fx,label(fx.text,fx.x,fx.y-23,23,fx.color,'mono-bold','center',8));
+            const at=stagePoint(fx);
+            feedback.set(fx,label(fx.text,at.x,at.y-23,23,fx.color,'mono-bold','center',8));
         }
         for (const [fx,text] of feedback) {
             if (!battle.effects.includes(fx)) { text.destroy(); feedback.delete(fx); }
-            else { text.y = fx.y-23-fx.age*46; text.alpha = Math.min(1,3*(1-fx.age/fx.life)); }
+            else { text.y = stagePoint(fx).y-23-fx.age*46; text.alpha = Math.min(1,3*(1-fx.age/fx.life)); }
         }
     };
 }
