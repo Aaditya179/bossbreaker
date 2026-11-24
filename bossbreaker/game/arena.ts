@@ -170,7 +170,7 @@ export function queueSelected(): boolean {
         battle.note = 'Selection exceeds remaining capacity.';
         return false;
     }
-    for (const id of battle.selected) battle.targets[id] = battle.target;
+    for (const id of battle.selected) battle.targets[id] ??= battle.target;
     battle.queue.push(...battle.selected);
     battle.selected = [];
     battle.inspected = -1;

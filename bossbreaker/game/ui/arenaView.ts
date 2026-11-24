@@ -13,8 +13,8 @@ const SHORT_NAME: Record<keyof typeof CARDS,string> = {
 export const HAND_Y = 1071;
 export const SLOT_Y = 886;
 export const ACTION_Y = 1238;
-export const HAND_X = [92,226,360,494,628];
-export const SLOT_X = [92,226,360,494,628];
+export const HAND_X = [64,182,301,419,538,656];
+export const SLOT_X = [64,182,301,419,538,656];
 
 // Presentation coordinates are independent of combat-space positions and collisions.
 export const HERO_STAGE = { x: 140, y: 482 };
@@ -75,6 +75,7 @@ export function drawArena() {
             style:'retro', fill:FOES[f.id].color,max:f.max,ghost:true,z:4 });
         return { art, bar };
     });
+    const intentLabels = battle.foes.map((foe,i) => label('',battle.foes.length > 1 ? (i === 0 ? 180 : 540) : 510,285,18,HOT,'sans-bold','center',7));
     const targetButtons = battle.foes.length > 1 ? battle.foes.map((foe,i) => {
         const x = i === 0 ? 180 : 540;
         const art = game.spawn({ id:'target-'+(i+1), texture:'button-small', x, y:230, width:245, height:62, layer:'hud', z:6,
@@ -110,17 +111,17 @@ export function drawArena() {
     const capacityBar = game.graphics({layer:'hud',x:360,y:850,width:480,height:20});
     capacityBar.handle.z = 2;
     const hand = HAND_X.map((x,i) => ({
-        base: sprite('card-slash',x,HAND_Y,120,1,'hand-'+(i+1)),
-        icon: sprite('icon-slash',x,HAND_Y-4,53,2,'hand-icon-'+(i+1)),
-        name: label('',x,HAND_Y-46,24),
-        effect: label('',x,HAND_Y+49,17,INK),
-        badge: label('',x+43,HAND_Y-62,20,GOLD,'mono-bold'),
+        base: sprite('card-slash',x,HAND_Y,108,1,'hand-'+(i+1)),
+        icon: sprite('icon-slash',x,HAND_Y-4,46,2,'hand-icon-'+(i+1)),
+        name: label('',x,HAND_Y-46,21),
+        effect: label('',x,HAND_Y+49,15,INK),
+        badge: label('',x+38,HAND_Y-62,20,GOLD,'mono-bold'),
     }));
     const slots = SLOT_X.map((x,i) => ({
-        base: sprite('slot',x,SLOT_Y+20,122,1,'slot-'+(i+1)),
+        base: sprite('slot',x,SLOT_Y+20,108,1,'slot-'+(i+1)),
         icon: sprite('icon-slash',x,SLOT_Y+12,45,2,'slot-icon-'+(i+1)),
         name: label('',x,SLOT_Y+52,18),
-        number: label(String(i+1),x-44,SLOT_Y-16,17,LOW,'mono-bold'),
+        number: label(String(i+1),x-33,SLOT_Y-16,17,LOW,'mono-bold'),
     }));
     const queueButton = sprite('button',180,1165,320,1,'queue-button');
     queueButton.height = 56;
@@ -177,6 +178,12 @@ export function drawArena() {
             title.scale = Math.min(1,21/Math.max(title.text.length,1));
             hp.text = foe.hp+' / '+foe.max;
         });
+        intentLabels.forEach((text,i) => {
+            const foe=battle.foes[i];
+            const attacks=battle.zones.filter(z=>z.owner===foe && foe.hp>0 && !foe.stagger);
+            text.text=attacks.map(z=>z.label+' '+Math.max(1,z.damage-stacks(foe.statuses,'chill')*4-stacks(foe.statuses,'weaken')*3)).join(' / ');
+            text.scale=Math.min(1,(battle.foes.length>1 ? 21 : 36)/Math.max(1,text.text.length));
+        });
         const chosen = battle.foes[battle.target];
         targetLabel.text = planning && chosen && chosen.hp > 0 ? 'TARGET '+(battle.target+1)+'  '+FOES[chosen.id].name+'  '+chosen.hp+'/'+chosen.max+'  '+Object.entries(chosen.statuses).map(([key,value])=>key+' '+value?.stacks).join(' ') : '';
         targetLabel.scale = Math.min(1, 55/Math.max(targetLabel.text.length,1));
@@ -193,7 +200,7 @@ export function drawArena() {
         else if (planning && battle.inspected >= 0) hint.text = CARDS[battle.hand[battle.inspected]!].tip;
         else if (battle.tutorial && planning && !battle.steamed) hint.text = 'Queue Frost Bolt → Fireball for Steam Burst.';
         else if (planning) {
-            const order = battle.queue.map(id => battle.hand[cardIndex(id)]);
+            const order = battle.selected.map(id => battle.hand[cardIndex(id)]);
             const previews: string[] = [];
             if (order[0] === 'guard') previews.push('Guard first');
             for (let i=1;i<order.length;i++) {
@@ -204,7 +211,7 @@ export function drawArena() {
             }
             if (order.some((card,i) => card === 'dash' && order[i+1] === 'slash')) previews.push('Lunging Cleave');
             if (order.some((card,i) => card === 'echo' && order[i+1] && order[i+1] !== 'echo')) previews.push('Echo repeats the next card');
-            hint.text = previews.length ? previews.join('  ·  ') : 'Select cards, then queue or discard.';
+            hint.text = previews.length ? previews.join('  ·  ') : 'Tap combo cards to reorder or retarget.';
         }
         else if (phase === 'enemy') hint.text = 'Guard absorbs damage until the response ends.';
         else hint.text = 'Your combo resolves automatically.';
@@ -245,34 +252,36 @@ export function drawArena() {
         shownTurn = battle.turn;
         shownRedraw = battle.redraw;
         slots.forEach(({base,icon,name,number},i) => {
-            const id = phase === 'execute' ? battle.sequence[i] : battle.hand[cardIndex(battle.queue[i])];
+            const id = phase === 'execute' ? battle.sequence[i] : battle.hand[cardIndex(battle.selected[i])];
+            base.visible = number.visible = Boolean(id);
             base.texture = id ? 'slot-lit' : 'slot';
             base.tint = focus === 5+i || (phase === 'execute' && i === battle.activeSlot && id) ? '#9de8ff' : '#ffffff';
             number.color = id ? GOLD : LOW;
-            number.text = id ? String(i+1)+' · '+cardSize(id,phase === 'execute' ? battle.sequenceIds[i] : battle.queue[i]) : String(i+1);
+            number.text = id ? String(i+1)+' · '+cardSize(id,phase === 'execute' ? battle.sequenceIds[i] : battle.selected[i]) : String(i+1);
             icon.visible = Boolean(id);
             if (id) icon.texture = 'icon-'+id;
-            name.text = id ? SHORT_NAME[id] + (planning && id === 'cleave' ? ' · ALL' : planning && battle.foes.length > 1 && battle.targets[battle.queue[i]] !== undefined ? ' · '+(battle.targets[battle.queue[i]]+1) : '') : 'Empty';
+            name.text = id ? SHORT_NAME[id] + (planning && id === 'cleave' ? ' · ALL' : planning && battle.foes.length > 1 && battle.targets[battle.selected[i]] !== undefined ? ' · '+(battle.targets[battle.selected[i]]+1) : '') : '';
             name.color = id ? CARDS[id].color : LOW;
         });
         const available = planning ? maxCapacity() - usedCapacity() : 0;
         const selectedSize = battle.selected.reduce((total,id) => total + cardSize(battle.hand[cardIndex(id)]!,id),0);
-        queueButton.alpha = planning && selectedSize > 0 && selectedSize <= available ? 1 : 0.48;
+        queueButton.alpha = planning ? 1 : 0.48;
         discardButton.alpha = planning && battle.pips && battle.selected.length ? 1 : 0.48;
         queueButton.setFrame(focus === 10 ? 1 : 0);
         discardButton.setFrame(focus === 11 ? 1 : 0);
         executeButton.setFrame(focus === 12 ? 1 : 0);
-        queueText.text = 'QUEUE SELECTED';
+        queueText.text = 'PASS TURN';
         discardText.text = 'DISCARD & DRAW';
         executeText.text = clear ? 'CONTINUE TO MAP' : planning
-            ? (battle.queue.length ? 'EXECUTE COMBO' : 'END TURN')
+            ? 'PLAY COMBO ('+battle.selected.length+' CARDS)'
             : phase === 'execute' ? battle.resolving : 'ENEMY TURN';
-        executeButton.alpha = clear || planning ? 1 : 0.57;
+        executeButton.alpha = clear || planning && selectedSize > 0 && selectedSize <= maxCapacity() ? 1 : 0.45;
         footer.text = planning ? 'SELECTED '+battle.selected.length+'  '+Object.entries(battle.statuses).map(([key,value])=>key+' '+value?.stacks).join(' ') : '';
-        capacityLabel.text = 'COMBO CAPACITY  '+(planning ? usedCapacity() : battle.sequence.reduce((sum,card,i) => sum + cardSize(card,battle.sequenceIds[i]),0))+' / '+maxCapacity();
+        capacityLabel.color = planning && selectedSize > maxCapacity() ? HOT : GOLD;
+        capacityLabel.text = (planning && selectedSize > maxCapacity() ? 'OVER CAPACITY: REMOVE '+(selectedSize-maxCapacity())+' · ' : 'COMBO CAPACITY  ')+(planning ? selectedSize : battle.sequence.reduce((sum,card,i) => sum + cardSize(card,battle.sequenceIds[i]),0))+' / '+maxCapacity();
         capacityBar.clear();
         capacityBar.draw(c => {
-            const cards = planning ? battle.queue.map(id => ({ card:battle.hand[cardIndex(id)]!, id })) :
+            const cards = planning ? battle.selected.map(id => ({ card:battle.hand[cardIndex(id)]!, id })) :
                 battle.sequence.map((card,i) => ({card,id:battle.sequenceIds[i]}));
             const units = cards.flatMap(entry => Array.from({length:cardSize(entry.card,entry.id)},()=>CARDS[entry.card].color));
             const unitWidth = 440 / maxCapacity();
@@ -281,7 +290,7 @@ export function drawArena() {
             c.textBaseline = 'middle';
             for (let unit=0;unit<maxCapacity();unit++) {
                 const x = 20 + unit*unitWidth;
-                c.fillStyle = units[unit] ?? '#403644';
+                c.fillStyle = planning && selectedSize > maxCapacity() && unit === maxCapacity()-1 ? '#ff695f' : units[unit] ?? '#403644';
                 c.fillRect(x,2,unitWidth-5,16);
                 c.fillStyle = units[unit] ? '#171522' : '#d2c4c2';
                 c.fillText(String(unit+1),x+(unitWidth-5)/2,10);
@@ -297,8 +306,9 @@ export function drawArena() {
                 if (foe.hp <= 0) return;
                 const at = foeStage(i), size = foeStageSize(i);
                 c.fillStyle = '#0a0910aa'; c.beginPath(); c.ellipse(at.x,at.y+size*0.43,size*0.34,12,0,0,TAU); c.fill();
-                if (planning && battle.target === i) {
-                    c.strokeStyle='#ffdc94'; c.lineWidth=3; c.beginPath(); c.ellipse(at.x,at.y+size*0.43,size*0.39,16,0,0,TAU); c.stroke();
+                const areaPreview = planning && battle.selected.some(id => battle.hand[cardIndex(id)] === 'cleave');
+                if (planning && (battle.target === i || areaPreview)) {
+                    c.strokeStyle=areaPreview ? '#ff857c' : '#ffdc94'; c.lineWidth=3; c.beginPath(); c.ellipse(at.x,at.y+size*0.43,size*0.39,16,0,0,TAU); c.stroke();
                 }
             });
             c.restore();

@@ -46,7 +46,7 @@ function counts(cards) {
     return [...cards].sort().join(',');
 }
 function assertCards() {
-    assert.equal(battle.hand.length, 5);
+    assert.equal(battle.hand.length, 6);
     assert.equal(counts([...battle.hand, ...battle.draw, ...battle.spent]), counts(run.deck));
     assert.equal(counts([...battle.handIds,...battle.drawIds,...battle.spentIds]),counts(run.deckIds));
     assert.equal(new Set([...battle.handIds,...battle.drawIds,...battle.spentIds]).size,run.deck.length);

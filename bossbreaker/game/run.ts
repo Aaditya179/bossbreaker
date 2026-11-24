@@ -1,7 +1,7 @@
 import { game } from './engine.js';
 
 export const MAX_HP = 100;
-export const HAND_SIZE = 5;
+export const HAND_SIZE = 6;
 export const START_CAPACITY = 5;
 export const cardLevel = (id: number | undefined): number => id === undefined ? 1 : (run.levels[id] ?? 1);
 export const cardSize = (card: Card, id?: number): number => (card === 'cleave' ? 3 : card === 'frost' || card === 'fire' || card === 'storm' || card === 'riposte' ? 2 : 1) + (cardLevel(id ?? run.deckIds[run.deck.indexOf(card)]) >= 3 ? 1 : 0);

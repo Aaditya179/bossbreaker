@@ -13,7 +13,7 @@ try {
    await page.mouse.click(box.x+box.width*x/720,box.y+box.height*y/1280);
    await page.waitForTimeout(90);
  }
- const handX=[92,226,360,494,628];
+ const handX=[64,182,301,419,538,656];
  async function state(){return page.evaluate(()=>window.game.inspect().state.battle);}
  async function resetBattle(){
    await page.evaluate(()=>window.game.cheats.run('boss','1'));
@@ -34,7 +34,7 @@ try {
    let b=await state();
    const indices=[];
    let size=0;
-   for(let i=0;i<5 && indices.length<count;i++){
+   for(let i=0;i<6 && indices.length<count;i++){
      const cost=['fire','frost','storm','riposte'].includes(b.hand[i])?2:b.hand[i]==='cleave'?3:1;
      if(size+cost<=5){indices.push(i);size+=cost;}
    }
@@ -42,12 +42,11 @@ try {
    const expected=indices.map(i=>b.handIds[i]);
    await select(indices);
    assert.deepEqual((await state()).queue,[]);
-   await tap(180,1165);
-   assert.deepEqual((await state()).queue,expected);
+   assert.deepEqual((await state()).selected,expected);
    if(count===3){
-     await tap(92,906);await tap(360,906);
+     await tap(64,906);await tap(301,906);
      const reordered=await state();
-     assert.deepEqual(reordered.queue,[expected[1],expected[2],expected[0]]);
+     assert.deepEqual(reordered.selected,[expected[1],expected[2],expected[0]]);
    }
    await turn();
    b=await state();
@@ -62,15 +61,15 @@ try {
  const order=[2,0,1].filter(i=>b.hand[i]);
  if(order.reduce((sum,i)=>sum+cost(b.hand[i]),0)<=5){
    const expected=order.map(i=>b.handIds[i]);
-   await select(order);await tap(180,1165);
-   assert.deepEqual((await state()).queue,expected);
+   await select(order);
+   assert.deepEqual((await state()).selected,expected);
    console.log('PASS actual queue preserves selection order');
  }
  await resetBattle();
  b=await state();
  const old=[...b.handIds];
- await select([0,1,2,3,4]);await tap(540,1165);
- b=await state();assert.equal(b.pips,2);assert.equal(b.hand.length,5);assert.ok(b.handIds.every(id=>!old.includes(id)));
+ await select([0,1,2,3,4,5]);await tap(540,1165);
+ b=await state();assert.equal(b.pips,2);assert.equal(b.hand.length,6);assert.ok(b.handIds.every(id=>!old.includes(id)));
  await assertInventory();
  console.log('PASS actual five-card discard for one action');
  await resetBattle();
@@ -79,20 +78,20 @@ try {
  b=await state();assert.notEqual(b.handIds[0],initial[0]);assert.deepEqual(b.handIds.slice(1),initial.slice(1));
  console.log('PASS actual deselect and replace only selected card');
  await resetBattle();
- b=await state();const queued=b.handIds[0];
- await select([0]);await tap(180,1165);await select([1,2]);await tap(540,1165);
- b=await state();assert.deepEqual(b.queue,[queued]);assert.equal(b.handIds[0],queued);assert.equal(b.pips,2);
- await tap(92,906);await tap(92,906);b=await state();assert.deepEqual(b.queue,[]);
- await select([0]);await tap(540,1165);b=await state();assert.notEqual(b.handIds[0],queued);assert.equal(b.pips,1);
- await turn();
+ b=await state();
+ await select([0,1]);await tap(540,1165);
+ b=await state();assert.equal(b.pips,2);
+ await select([0]);await tap(540,1165);
+ b=await state();assert.equal(b.pips,1);
+ await select([0]);await turn();
  assert.equal((await state()).pips,1);
  await resetBattle();assert.equal((await state()).pips,3);
- console.log('PASS actual queued card protection, return, turn persistence and battle reset');
+ console.log('PASS actual discard budget persists and resets per battle');
  await resetBattle();
  for(let action=0;action<3;action++){
-   await select([0,1,2,3,4]);await tap(540,1165);await assertInventory();
+   await select([0,1,2,3,4,5]);await tap(540,1165);await assertInventory();
  }
- b=await state();assert.equal(b.pips,0);assert.equal(b.hand.length,5);
+ b=await state();assert.equal(b.pips,0);assert.equal(b.hand.length,6);
  console.log('PASS actual redraw after pile exhaustion, unique IDs and zero budget');
 
  await page.evaluate(()=>window.game.cheats.run('level','1'));
@@ -116,7 +115,7 @@ try {
  await page.evaluate(()=>window.game.cheats.run('give-card','Slash'));
  await page.waitForTimeout(200);
  await tap(540,230);
- await select([0]);await tap(180,1165);
+ await select([0]);
  const targetText=await page.evaluate(()=>JSON.stringify(window.game.inspect().objects.map(o=>o.text).filter(Boolean)));
  assert.ok(targetText.includes('Slash · 2'));
  const prior=await page.evaluate(()=>window.game.bars.all.find(bar=>bar.max===48)?.value);
@@ -159,11 +158,10 @@ try {
    assert.ok(!result.includes('No card family'));
    await page.waitForTimeout(100);
    await select([index]);
-   await tap(180,1165);
  }
  await resetBattle();
  for(let i=0;i<5;i++) await injectedQueue('Slash',i);
- b=await state();assert.equal(b.queue.length,5);
+ b=await state();assert.equal(b.selected.length,5);
  await turn();
  assert.equal((await state()).turn,2);
  console.log('PASS actual five size-one cards at capacity five');
@@ -171,7 +169,7 @@ try {
  await resetBattle();
  await injectedQueue('Cleave',0);
  await injectedQueue('Fireball',1);
- assert.equal((await state()).queue.length,2);
+ assert.equal((await state()).selected.length,2);
  console.log('PASS actual size-three plus size-two at capacity five');
 
  await resetBattle();
@@ -179,10 +177,10 @@ try {
  await injectedQueue('Frost Bolt',1);
  await page.evaluate(()=>window.game.cheats.run('give-card','Fireball'));
  await page.waitForTimeout(100);
- await select([2]);await tap(180,1165);
- b=await state();assert.equal(b.queue.length,2);
+ await select([2]);await tap(360,1238);
+ b=await state();assert.equal(b.queue.length,0);assert.equal(b.selected.length,3);
  const overflowText=await page.evaluate(()=>JSON.stringify(window.game.inspect().objects.map(o=>o.text).filter(Boolean)));
- assert.ok(overflowText.includes('exceeds remaining capacity'));
+ assert.ok(overflowText.includes('OVER CAPACITY'));
  console.log('PASS actual over-capacity selection remains unqueued');
 
  await page.evaluate(()=>window.game.cheats.run('boss','2'));
@@ -190,7 +188,7 @@ try {
  await injectedQueue('Fireball',0);
  await injectedQueue('Frost Bolt',1);
  await injectedQueue('Fireball',2);
- assert.equal((await state()).queue.length,3);
+ assert.equal((await state()).selected.length,3);
  console.log('PASS actual three size-two cards at capacity six');
 
  await page.evaluate(()=>window.game.cheats.run('level','1'));

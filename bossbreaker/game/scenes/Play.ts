@@ -1,6 +1,6 @@
 import { stacks } from '../status.js';
 import { game } from '../engine.js';
-import { battle, cardIndex, discard, endTurn, execute, FOES, initBattle, queueCard, queueSelected, stepBattle } from '../arena.js';
+import { battle, cardIndex, discard, endTurn, execute, FOES, initBattle, queueSelected, stepBattle } from '../arena.js';
 import { endRun, ROOMS, run } from '../run.js';
 import { padReader } from '../input.js';
 import { ACTION_Y, drawArena, HAND_X, HAND_Y, SLOT_X, SLOT_Y, stageTargetAt } from '../ui/arenaView.js';
@@ -26,6 +26,7 @@ export const Play = {
         let lossScheduled = false;
         let focus = -1;
         let picked = -1;
+        let confirmPass = false;
         const padInput = padReader();
         let isTouch = game.input.touchDevice;
         const discardSelection = (): void => {
@@ -48,13 +49,15 @@ export const Play = {
             if (id === null || id === undefined) return;
             if (battle.queue.includes(id)) { battle.note = 'Remove this card from the queue first.'; return; }
             const selected = battle.selected.indexOf(id);
-            if (selected < 0) battle.selected.push(id); else battle.selected.splice(selected, 1);
+            if (selected < 0) { battle.selected.push(id); battle.targets[id] = battle.target; } else { battle.selected.splice(selected, 1); delete battle.targets[id]; }
             battle.note = '';
             game.sound.play('select');
         };
         const advance = (): boolean => {
             if (battle.phase === 'clear' && done) { game.scenes.go('reward'); return true; }
-            if (battle.queue.length) execute(); else endTurn();
+            if (battle.phase !== 'plan') return false;
+            if (!battle.selected.length) { battle.note = 'Select cards to play, or use Pass Turn.'; return false; }
+            if (queueSelected()) execute();
             return false;
         };
         render(time,false,focus,isTouch,null,reward);
@@ -84,12 +87,12 @@ export const Play = {
                 if (pad.pressed('a')) {
                     if (battle.phase === 'clear' || focus === 12) { if (advance()) return; }
                     else if (focus === 11) discardSelection();
-                    else if (focus === 10) queueSelected();
-                    else if (focus >= 0 && focus < 5) { select(focus); picked = -1; }
-                    else if (focus >= 5 && focus < 10) {
-                        const slot = focus-5;
-                        if (picked >= 0) { queueCard(picked,slot); picked = -1; }
-                        else picked = battle.queue[slot] ?? -1;
+                    else if (focus === 10) { battle.note = 'Pass again to take the enemy response.'; }
+                    else if (focus >= 0 && focus < 6) { select(focus); picked = -1; }
+                    else if (focus >= 6 && focus < 10) {
+                        const slot = focus-6;
+                        if (picked >= 0) { const from=battle.selected.indexOf(picked); if (from>=0) { battle.selected.splice(from,1); battle.selected.splice(slot,0,picked); } picked=-1; }
+                        else picked = battle.selected[slot] ?? -1;
                     }
                 }
                 for (const p of game.input.pointers) {
@@ -98,7 +101,7 @@ export const Play = {
                     if (p.isTouch) isTouch = true;
                     focus = -1;
                     if (Math.abs(p.startY-1165) < 30 && Math.abs(p.y-1165) < 30) {
-                        if (p.startX < 360 && p.x < 360) queueSelected();
+                        if (p.startX < 360 && p.x < 360) { if (confirmPass) { battle.selected=[]; endTurn(); confirmPass=false; } else { confirmPass=true; battle.note='Pass: enemy attacks. Tap Pass Turn again to confirm.'; } }
                         else if (p.startX >= 360 && p.x >= 360) discardSelection();
                         continue;
                     }
@@ -110,26 +113,29 @@ export const Play = {
                     const foe = stageTargetAt(p.x,p.y);
                     if (foe >= 0 && Math.hypot(p.x-p.startX,p.y-p.startY) < 25) {
                         battle.target = foe;
+                        const wasPicked = picked >= 0 && battle.selected.includes(picked);
+                        if (wasPicked) { battle.targets[picked]=foe; picked=-1; }
+                        else { game.scenes.push('enemy-info'); return; }
                         const enemy = battle.foes[foe];
                         battle.note = FOES[enemy.id].name+' '+enemy.hp+'/'+enemy.max+(stacks(enemy.statuses,'chill') ? ' · CHILLED' : '');
                         continue;
                     }
-                    const hand = Math.abs(p.startY-HAND_Y) < 74 ? nearest(p.startX,HAND_X,60) : -1;
-                    const from = Math.abs(p.startY-(SLOT_Y+20)) < 57 ? nearest(p.startX,SLOT_X,74) : -1;
-                    const to = Math.abs(p.y-(SLOT_Y+20)) < 57 ? nearest(p.x,SLOT_X,74) : -1;
+                    const hand = Math.abs(p.startY-HAND_Y) < 74 ? nearest(p.startX,HAND_X,55) : -1;
+                    const from = Math.abs(p.startY-(SLOT_Y+20)) < 57 ? nearest(p.startX,SLOT_X,55) : -1;
+                    const to = Math.abs(p.y-(SLOT_Y+20)) < 57 ? nearest(p.x,SLOT_X,55) : -1;
                     if (hand >= 0 && to >= 0) { select(hand); picked = -1; }
-                    else if (hand >= 0 && Math.abs(p.y-HAND_Y) < 74 && nearest(p.x,HAND_X,60) === hand) { select(hand); picked = -1; }
+                    else if (hand >= 0 && Math.abs(p.y-HAND_Y) < 74 && nearest(p.x,HAND_X,55) === hand) { select(hand); picked = -1; }
                     else if (from >= 0) {
-                        if (from !== to && to >= 0 && battle.queue[from] !== undefined) {
-                            queueCard(battle.queue[from],to);
-                            picked = -1;
+                        if (from !== to && to >= 0 && battle.selected[from] !== undefined) {
+                            const [id] = battle.selected.splice(from,1); battle.selected.splice(to,0,id); picked=-1;
                         } else if (to === from && picked >= 0) {
-                            if (battle.queue[from] === picked) queueCard(picked);
-                            else queueCard(picked,from);
-                            picked = -1;
-                        } else if (to === from && battle.queue[from] !== undefined) {
-                            picked = battle.queue[from];
-                            battle.inspected = cardIndex(picked);
+                            const old = battle.selected.indexOf(picked);
+                            if (old >= 0 && old !== from) { battle.selected.splice(old,1); battle.selected.splice(from,0,picked); }
+                            else if (old >= 0) { battle.selected.splice(old,1); delete battle.targets[picked]; }
+                            picked=-1;
+                        } else if (to === from && battle.selected[from] !== undefined) {
+                            picked = battle.selected[from]; battle.inspected = cardIndex(picked);
+                            battle.note = 'Tap another combo card to reorder, or an enemy to retarget.';
                         }
                     }
                 }

@@ -20,7 +20,7 @@ function arena(room: Room, enemy?: Parameters<typeof initBattle>[0]): void {
 }
 
 export function addDebugControls(): void {
-    game.inspect.state(() => ({ run, battle }));
+    game.inspect.state(() => ({ run, battle: Object.assign({ selected:battle.selected, targets:battle.targets }, battle) }));
     const add = (name: string, does: string, args: string, action: (...parts: string[]) => string): void => {
         game.cheats.add({ name, does, args, run: (...parts) => {
             if (!initialized && !run.map.length) reset();
@@ -59,7 +59,8 @@ export function addDebugControls(): void {
         run.stats.cards++;
         if (game.scenes.current === 'play') {
             if (battle.phase === 'plan') {
-                const slot = battle.hand.findIndex((_,i)=>!battle.queue.includes(battle.handIds[i]!));
+                const slot = battle.hand.findIndex((_,i)=>!battle.queue.includes(battle.handIds[i]!) && !battle.selected.includes(battle.handIds[i]!));
+                if (slot < 0) { battle.draw.unshift(id); battle.drawIds.unshift(cardId); return 'Added '+CARDS[id].name; }
                 const previous = battle.hand[slot];
                 if (previous) { battle.spent.push(previous); battle.spentIds.push(battle.handIds[slot]!); }
                 battle.hand[slot] = id;
