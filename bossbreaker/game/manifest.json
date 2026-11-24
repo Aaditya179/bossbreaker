@@ -1,0 +1,37 @@
+{
+  "name": "bossbreaker",
+  "screen": {
+    "width": 720,
+    "height": 1280,
+    "fit": "letterbox",
+    "background": "#0e0d15",
+    "pixelArt": true
+  },
+  "backgroundPolicy": "pause",
+  "packs": [
+    {
+      "id": "core-2d"
+    },
+    {
+      "id": "typography"
+    },
+    {
+      "id": "ui"
+    },
+    {
+      "id": "ui-skins"
+    },
+    {
+      "id": "ui-skin-metal"
+    },
+    {
+      "id": "save",
+      "options": {
+        "namespace": "bossbreaker"
+      }
+    },
+    {
+      "id": "bars"
+    }
+  ]
+}

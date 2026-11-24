@@ -1,0 +1,24 @@
+import { game } from './engine.js';
+import assets from './assets.json';
+import { defineSounds, paintArt } from './art.js';
+import { addDebugControls } from './debug.js';
+import { Title } from './scenes/Title.js';
+import { Map } from './scenes/Map.js';
+import { Play } from './scenes/Play.js';
+import { Campfire, End, Treasure } from './scenes/Rooms.js';
+import { Elements } from './scenes/Elements.js';
+import { Statuses } from './scenes/Statuses.js';
+import { Reward } from './scenes/Reward.js';
+import { Deck } from './scenes/Deck.js';
+import { Pause } from './scenes/Pause.js';
+
+paintArt();
+defineSounds();
+game.ui.theme = 'metal';
+if (game.save.read('muted',false)) game.commands.mute();
+await game.assets.load(assets,{pack:'title'});
+for (const scene of [Title,Map,Play,Campfire,Treasure,End,Pause,Deck,Reward,Statuses,Elements]) game.scenes.register(scene);
+addDebugControls();
+await game.start();
+game.scenes.go('title');
+void game.assets.load(assets,{pack:'game'});
