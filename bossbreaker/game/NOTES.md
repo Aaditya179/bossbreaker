@@ -2,31 +2,28 @@
 
 ## Play and test
 
-- Run `npm run -s serve` and open http://localhost:4173. Run `npm test` for combat checks and `npm run -s test:mobile` while the server is running for portrait touch checks.
-- The title button enters the map. Tap a gold-framed connected node to enter a room. The crown opens the floor boss.
-- In combat, read the enemy action and damage above the queue. Chill reduces each affected enemy hit by 4. Rune eruptions and slime puddles are extra telegraphed hits.
-- Tap a hand card to queue it and see its effect. Tap a filled slot, then another slot to move it. Tap the same slot twice to remove it. Dragging cards or slots is also supported. There are three slots and no energy costs.
-- Tap **Discard & Draw**, tap any unqueued cards to select them, then tap **Draw** to replace them together for one action. Tap the button with no selection to cancel. There are three actions per battle. The discard pile is shuffled when the draw pile empties. With a very small deck, newly discarded cards can be drawn after the rest of the deck has been exhausted.
-- Tap **Execute Combo** once. Cards resolve in order, followed by surviving enemies. Guard absorbs damage across enemy hits and expires after the response. Frost Bolt followed by Fireball triggers Steam Burst. Dash Strike followed by Slash cleaves all enemies. Arcane Echo repeats the next eligible card. Guard first adds 6 barrier.
-- Mouse and touch use the same controls. Keyboard Enter executes and Q opens discard selection. Gamepad D-pad or left stick moves focus, A selects, X controls discards, Y executes and Start pauses.
-- Treasure awards a relic, sometimes with healing. Campfires upgrade a card type or remove one copy. Battle rewards and the map lead toward three bosses. Victory and Game Over show run statistics.
-- Pause and sound are at the top right. Mute is remembered.
+Run `npm run -s serve` and open http://localhost:4173. The title leads to a branching map and three floor bosses. In a fight, tap hand cards to select or deselect them; the numbered marks show selection order. Queue Selected adds the selection in that order, provided its total size fits the available combo capacity. Discard & Draw replaces all selected unqueued cards for one of three battle-wide discards. Cards remain selected if they cannot fit. Tap two queued slots to swap them, or the same slot twice to return a card; dragging is also supported. Tap an enemy or its target button before queueing to assign a target. A dead target falls back to the first living enemy. Area attacks affect all living enemies.
 
-## Inspect and debug
+Execute Combo plays the nonempty queue automatically; End Turn passes. Inputs are locked while actions and enemy responses resolve. Five cards are drawn at each planning turn; unplayed and executed cards enter the discard pile and are reshuffled into the draw pile as needed. Newly discarded cards can be drawn only when the remaining draw pile and earlier discards cannot satisfy a draw. Each physical copy has a stable ID. No manual movement, aiming or energy is required.
 
-Use `npm run -s play -- "wait 0.4; cheat"` for the held browser. Screen names are `title`, `map`, `play`, `treasure`, `campfire`, `pause`, and `end`. Inspect IDs include `hero`, `foe-`, `hand-1` through `hand-5`, `slot-1` through `slot-3`, and `discard-pip-`.
+Combo capacity starts at 5 and increases by 1 after each floor boss, to 8. Cards consume 1–3 units, with level-three evolution adding one. The five-card hand does not grow with capacity. Read enemy intents and statuses before executing. Guard lasts through the enemy response, Dodge evades one hit, and Riposte counters one blocked or evaded hit. Dash followed by Slash hits all enemies; Echo repeats the next eligible card. Use the Deck and Status buttons for details. Mouse and touch are supported; keyboard and gamepad controls are optional.
 
-- `level 1|2|3`, `boss 1|2|3`, `room monster|cursed|treasure|campfire|boss`, and `enemy Crypt Slime|Bone Archer|Gargoyle Sentinel` open encounters.
-- `screen victory|game-over`, `win-room`, and `lose-run` check outcomes.
-- `give-card <name>`, `give heart-gem|relic-charm|card-scroll`, `heal`, and `discard-pips` modify a run.
-- `infinite-health on|off`, `invincible on|off`, `infinite-pips on|off`, and `one-hit-kills on|off` set debug switches.
+The Deck viewer lists owned copies, levels, sizes, families, piles and relics. Between encounters, it can sell a specific copy for gold; rare or level-three sales require confirmation. At least eight cards, an attack and a Guard must remain. The five-family limit counts Sword, Defense, Counter, Arcane, Elemental (Fire and Frost), and Storm; selling the last copy frees a family slot. Gold records resale value; there is currently no shop. Level-three upgrades add size and an effect, and previews disclose both. Normal fights offer a card, an eligible copy upgrade or recovery. Bosses guarantee capacity and offer a relic, a weaker signature power or an optional cursed relic. Campfires and treasure provide additional choices or rewards.
 
-## Code and design
+## Combat rules
 
-`run.ts` owns deck composition, map, rewards and run stats. `arena.ts` owns card piles, ordered execution, enemy intents and resolution. `scenes/Play.ts` handles interaction and the room outcome. `ui/arenaView.ts` presents combat. `art.ts` paints the existing pixel art and defines synthesized effects. Other scenes manage the title, map, rooms, pause and results.
+Consecutive elemental cards react regardless of order, in addition to their ordinary effects: Fire + Frost deals 10 area damage and Weakens; Fire + Storm deals 8 area damage; Frost + Storm deals 10 extra damage and Armor Break; Fire + Fire adds Burn; Frost + Frost adds Chill; Storm + Storm deals 8 area damage. Non-elemental cards break the chain. Future three-element reactions could reward all three distinct elements with a controlled area effect, but are not implemented.
 
-Five-card hands, limited group redraws and readable intents create the decisions. Sequence bonuses reward discovery, while impact effects, audio and paced automatic playback make the consequences visible. The map and relics carry those decisions between encounters.
+Statuses tick after the enemy response. Poison deals 2 per stack and Burn 3 per stack; each caps at 5 stacks for two ticks. Chill subtracts 4 damage per stack, Weaken subtracts 3, and Armor Break adds 3 incoming damage; each caps at 2 stacks for two turns. Paralysis reduces next-turn capacity by 1 and Silence prevents elemental cards from being queued; each lasts one turn and caps at one stack. Reapplying a status refreshes its duration. Statuses applied by enemies persist into the next planning turn. The Status viewer describes these rules in game.
 
-## Prototype limits
+The Dread Knight applies Armor Break, the Lich can Silence, and the Abyssal Overlord inflicts Burn and Paralysis on telegraphed attacks. Their optional inherited powers respectively apply Armor Break on the first sword hit, add a Chill stack to Frost, or add a Burn stack to the first Fireball each turn. Glassheart adds 6 direct damage per hit while reducing maximum health by 20. All boss choices disclose their effects.
 
-Maps use a five-row structure with shuffled branches and authored encounters. Balance is a first pass. The existing roster uses Guard and interruption for defense and has no separate Dodge, Riposte or Shield Bash cards. The 320px layout fits and responds to touch, though card text is small. Physical gamepad testing remains outstanding.
+## Validation and development
+
+`npm test` runs deterministic combat and deck tests plus seeded encounter simulations. With the local server running, `npm run -s test:interactions` exercises actual desktop browser interactions and `npm run -s test:mobile` exercises touch layouts at 320, 375 and 430 pixels. `npm run -s build` builds the game; `npm run -s smoke -- --seconds 45` checks runtime startup. The simulation compares representative sword, elemental, defense, heavy, evolved and relic builds against isolated normal and boss encounters; it is a tuning aid, not a complete-run win-rate estimate.
+
+`run.ts` owns persistent copies, capacity, rewards and run progression. `arena.ts` manages combat, piles, targets and the state machine. `status.ts` and `elements.ts` hold shared status and reaction rules. The Phaser scenes and `ui/arenaView.ts` render and animate those decisions. `art.ts` contains the existing pixel art and synthesized effects.
+
+## Known limits
+
+The portrait interface fits tested viewport sizes, but secondary card text is dense at 320px. Fast-forward and reduced-motion modes are not implemented. Physical gamepad devices, real phones and Reddit Devvit integration have not been verified. Balancing remains a prototype; isolated simulations cannot establish complete-run fairness or cover every build. Future three-element reactions and a gold-spending shop are not implemented.

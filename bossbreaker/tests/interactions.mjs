@@ -153,5 +153,88 @@ try {
  assert.equal(owned.maxHp,80);
  console.log('PASS actual cursed reward and disclosed max-health penalty');
 
+
+ async function injectedQueue(card,index) {
+   const result=await page.evaluate(name=>window.game.cheats.run('give-card',name),card);
+   assert.ok(!result.includes('No card family'));
+   await page.waitForTimeout(100);
+   await select([index]);
+   await tap(180,1165);
+ }
+ await resetBattle();
+ for(let i=0;i<5;i++) await injectedQueue('Slash',i);
+ b=await state();assert.equal(b.queue.length,5);
+ await turn();
+ assert.equal((await state()).turn,2);
+ console.log('PASS actual five size-one cards at capacity five');
+
+ await resetBattle();
+ await injectedQueue('Cleave',0);
+ await injectedQueue('Fireball',1);
+ assert.equal((await state()).queue.length,2);
+ console.log('PASS actual size-three plus size-two at capacity five');
+
+ await resetBattle();
+ await injectedQueue('Fireball',0);
+ await injectedQueue('Frost Bolt',1);
+ await page.evaluate(()=>window.game.cheats.run('give-card','Fireball'));
+ await page.waitForTimeout(100);
+ await select([2]);await tap(180,1165);
+ b=await state();assert.equal(b.queue.length,2);
+ const overflowText=await page.evaluate(()=>JSON.stringify(window.game.inspect().objects.map(o=>o.text).filter(Boolean)));
+ assert.ok(overflowText.includes('exceeds remaining capacity'));
+ console.log('PASS actual over-capacity selection remains unqueued');
+
+ await page.evaluate(()=>window.game.cheats.run('boss','2'));
+ await page.waitForTimeout(400);
+ await injectedQueue('Fireball',0);
+ await injectedQueue('Frost Bolt',1);
+ await injectedQueue('Fireball',2);
+ assert.equal((await state()).queue.length,3);
+ console.log('PASS actual three size-two cards at capacity six');
+
+ await page.evaluate(()=>window.game.cheats.run('level','1'));
+ await page.evaluate(()=>window.game.cheats.run('room','monster'));
+ await page.waitForTimeout(400);
+ const beforeCardReward=await page.evaluate(()=>window.game.inspect().state.run.deck.length);
+ await page.evaluate(()=>window.game.cheats.run('win-room'));
+ await page.waitForTimeout(250);await tap(360,1238);
+ await page.waitForFunction(()=>window.game.scenes.current==='reward');
+ await page.waitForTimeout(300);await tap(360,360);
+ await page.waitForFunction(()=>window.game.scenes.current==='map');
+ owned=await page.evaluate(()=>window.game.inspect().state.run);
+ assert.equal(owned.deck.length,beforeCardReward+1);
+ assert.equal(owned.stats.cards,1);
+ console.log('PASS actual room card reward updates the run deck');
+
+ await page.evaluate(()=>window.game.cheats.run('level','1'));
+ await page.evaluate(()=>window.game.cheats.run('room','campfire'));
+ await page.waitForTimeout(400);
+ let runState=await page.evaluate(()=>window.game.inspect().state.run);
+ const evolvedId=runState.deckIds[runState.deck.indexOf('slash')];
+ await tap(152,510);await tap(217,995);
+ runState=await page.evaluate(()=>window.game.inspect().state.run);
+ assert.equal(runState.levels[evolvedId],2);
+ await page.evaluate(()=>window.game.cheats.run('room','campfire'));
+ await page.waitForTimeout(400);await tap(152,510);
+ const evolutionText=await page.evaluate(()=>JSON.stringify(window.game.inspect().objects.map(o=>o.text).filter(Boolean)));
+ assert.ok(evolutionText.includes('Lv 3 size 1'));
+ await tap(217,995);
+ runState=await page.evaluate(()=>window.game.inspect().state.run);
+ assert.equal(runState.levels[evolvedId],3);
+ console.log('PASS actual per-copy upgrade and evolution-size preview');
+
+ await resetBattle();
+ await tap(507,53);
+ await page.waitForFunction(()=>window.game.scenes.current==='deck');
+ await page.waitForTimeout(350);
+ runState=await page.evaluate(()=>window.game.inspect().state.run);
+ const deckBefore=runState.deck.length, goldBefore=runState.gold;
+ await tap(360,235);await tap(356,1108);
+ runState=await page.evaluate(()=>window.game.inspect().state.run);
+ assert.equal(runState.deck.length,deckBefore);
+ assert.equal(runState.gold,goldBefore);
+ await tap(585,1108);
+ console.log('PASS actual selling is blocked in combat');
  assert.deepEqual(errors,[]);
 } finally {await browser.close();}

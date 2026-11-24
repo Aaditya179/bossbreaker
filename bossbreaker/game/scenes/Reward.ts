@@ -21,6 +21,8 @@ export const Reward = {
             cardSize(run.deck[i],id) + (cardLevel(id) === 2 ? 1 : 0) <= run.capacity);
         const upgradeId = eligible.length ? game.rng.pick(eligible) : undefined;
         const upgradeCard = upgradeId !== undefined ? run.deck[run.deckIds.indexOf(upgradeId)] : null;
+        const upgradeValue = (card: Card, level: number): number => card === 'dodge' ? (level-1)*4 :
+            CARDS[card].power+(level-1)*5+(card === 'guard' && level >= 3 ? 4 : 0);
         const availableRelics = RELICS.map((_,i) => i).filter(i => !run.relics.includes(i));
         const relic = game.rng.pick(availableRelics.length ? availableRelics : RELICS.map((_,i) => i));
         const powers = [
@@ -41,7 +43,7 @@ export const Reward = {
             { title:'Add '+CARDS[newCard].name, detail:CARDS[newCard].tip, icon:newCard, act:() => { if (addCard(newCard) >= 0) run.stats.cards++; } },
             { title:upgradeCard ? 'Upgrade '+CARDS[upgradeCard].name : run.powers.includes('whetstone') ? 'Fortitude' : 'Tempered Edge',
                 detail:upgradeCard ? 'Level '+cardLevel(upgradeId)+' → '+(cardLevel(upgradeId)+1)+
-                    ' · Power '+(CARDS[upgradeCard].power+(cardLevel(upgradeId)-1)*5)+' → '+(CARDS[upgradeCard].power+cardLevel(upgradeId)*5)+' · Size '+cardSize(upgradeCard,upgradeId)+' → '+(cardSize(upgradeCard,upgradeId)+(cardLevel(upgradeId)===2?1:0))+(cardLevel(upgradeId)===2 ? ' · '+evolutionEffect(upgradeCard) : '')
+                    ' · '+(upgradeCard === 'dodge' ? 'Barrier' : upgradeCard === 'echo' ? 'Repeat bonus' : 'Power')+' '+upgradeValue(upgradeCard,cardLevel(upgradeId))+' → '+upgradeValue(upgradeCard,cardLevel(upgradeId)+1)+' · Size '+cardSize(upgradeCard,upgradeId)+' → '+(cardSize(upgradeCard,upgradeId)+(cardLevel(upgradeId)===2?1:0))+(cardLevel(upgradeId)===2 ? ' · '+evolutionEffect(upgradeCard) : '')
                     : run.powers.includes('whetstone') ? 'Gain 8 maximum health and restore 8.' : 'Sword attacks gain 3 damage.',
                 icon:upgradeCard ?? 'slash', act:() => {
                     if (upgradeCard) upgrade(upgradeCard,upgradeId);
