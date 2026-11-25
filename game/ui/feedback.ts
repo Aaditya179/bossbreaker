@@ -16,7 +16,7 @@ const PRESETS = {
 
 export function combatFeedback(targetAt:(index:number)=>{x:number;y:number}) {
     let source:CombatEvent[] | null=null;
-    let cursor=0, total=0, current='', lastCombo='', target='', turnActive=false, now=0, shakeUntil=0, freezeUntil=0;
+    let cursor=0, total=0, current='', lastCombo='', target='', turnActive=false, now=0, shakeUntil=0, freezeUntil=0, ultimateUntil=0;
     const summary=label('',360,658,22,INK,'mono-bold','center',8);
     const banner=label('',360,368,34,GOLD,'serif-bold','center',9);
     banner.alpha=0;
@@ -26,10 +26,17 @@ export function combatFeedback(targetAt:(index:number)=>{x:number;y:number}) {
         if (event.kind==='damage' && event.phase==='execute') total+=event.amount ?? 0;
         if (event.kind==='combo' || event.kind==='echo') {
             lastCombo=event.text;
-            banner.text=event.text; banner.color=event.color ?? GOLD;
-            banner.alpha=1; banner.scale=1;
-            if (!preferences.reducedMotion) game.tween.from(banner,{scale:0.83},{duration:0.18,ease:'easeOutBack'});
-            game.tween.to(banner,{alpha:0},{duration:PRESETS.combo.duration});
+            const ultimate=['CATACLYSM','CRYSTAL BASTION','METEORFALL','ABSOLUTE TEMPEST'].includes(event.text);
+            if (ultimate || now>=ultimateUntil) {
+                if (ultimate) ultimateUntil=now+0.95;
+                banner.text=event.text; banner.color=event.color ?? GOLD;
+                banner.alpha=1; banner.scale=1;
+                if (!preferences.reducedMotion) game.tween.from(banner,{scale:0.83},{duration:0.18,ease:'easeOutBack'});
+                game.tween.to(banner,{alpha:0},{duration:ultimate ? 0.95 : PRESETS.combo.duration});
+            } else {
+                const proc=label(event.text,140,370,19,event.color ?? GOLD,'mono-bold','center',10);
+                game.tween.to(proc,{y:345,alpha:0},{duration:0.7,onComplete:()=>proc.destroy()});
+            }
         }
         if (event.kind==='damage' || event.kind==='status' || event.kind==='block') {
             const at=event.target === undefined || event.target < 0 ? {x:140,y:482} : targetAt(event.target);

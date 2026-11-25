@@ -1,19 +1,19 @@
-import { discovered } from '../combos.js';
+import { COMBOS, discovered } from '../combos.js';
 import { preferences } from './preferences.js';
 import { cardVisual, RARITY_COLORS } from './cards.js';
 import { combatFeedback } from './feedback.js';
-import { reaction } from '../elements.js';
+import { planReactions, TRIPLES } from '../elements.js';
 import { stacks } from '../status.js';
 import { game } from '../engine.js';
 import { angle, battle, cardIndex, FOES, maxCapacity, usedCapacity, type CombatEvent, type Effect, type Point, type Zone } from '../arena.js';
-import { CARDS, MAX_HP, PIPS, cardLevel, cardRarity, cardSize, run } from '../run.js';
+import { CARDS, EARTH_BLOCK_BASE, EARTH_BLOCK_STEP, ELEMENT_POWER_STEP, MAX_HP, PIPS, cardDescription, cardLevel, cardRarity, cardSize, run } from '../run.js';
 import { GOLD, HOT, INK, label, LOW, sprite } from './chrome.js';
 
 const TAU = Math.PI * 2;
 const SHORT_NAME: Record<keyof typeof CARDS,string> = {
     sovereign:'Sovereign', immolate:'Blood Blade', bulwark:'Aegis',
     slash:'Slash', cleave:'Cleave', dash:'Dash', frost:'Frost', fire:'Fire',
-    storm:'Storm', dodge:'Dodge', riposte:'Riposte', guard:'Guard', echo:'Echo',
+    storm:'Storm', wind:'Wind', earth:'Earth', dodge:'Dodge', riposte:'Riposte', guard:'Guard', echo:'Echo',
 };
 export const HAND_Y = 1071;
 export const SLOT_Y = 886;
@@ -134,6 +134,7 @@ export function drawArena() {
 
     const showFeedback = combatFeedback(foeStage);
     let stageCombo: CombatEvent | undefined;
+    let comboSource: CombatEvent[] | null=null, comboCursor=0;
     let comboAt = -10;
     const handLift = HAND_X.map(()=>0);
     let lastFrame = 0;
@@ -142,8 +143,11 @@ export function drawArena() {
     return (time: number, discardMode: boolean, focus: number, touch: boolean, stick: {x:number;y:number;dx:number;dy:number} | null, reward: string) => {
         const delta = Math.min(0.1, Math.max(0,time-lastFrame)); lastFrame=time;
         const {phase} = battle;
-        const latestCombo = [...battle.events].reverse().find(e=>e.kind==='combo' || e.kind==='echo');
-        if (latestCombo !== stageCombo) { stageCombo=latestCombo; if (latestCombo) comboAt=time; }
+        if (comboSource!==battle.events) { comboSource=battle.events; comboCursor=0; stageCombo=undefined; }
+        const incoming=battle.events.slice(comboCursor).filter(e=>e.kind==='combo' || e.kind==='echo'); comboCursor=battle.events.length;
+        const ultimate=incoming.find(e=>['CATACLYSM','CRYSTAL BASTION','METEORFALL','ABSOLUTE TEMPEST'].includes(e.text));
+        const latestCombo=ultimate ?? incoming.at(-1);
+        if (latestCombo) { stageCombo=latestCombo; comboAt=time; }
         const presentation = showFeedback(battle.events,phase,battle.sequence.length,time);
         const shake = presentation.shake;
         stage.handle.x = 360 + shake;
@@ -204,20 +208,17 @@ export function drawArena() {
         intentDetail.scale = Math.min(1, 51 / Math.max(1,intentDetail.text.length));
         if (clear) hint.text = reward;
         else if (planning && battle.note) hint.text = battle.note;
-        else if (planning && battle.inspected >= 0) hint.text = CARDS[battle.hand[battle.inspected]!].tip;
-        else if (battle.tutorial && planning && !battle.steamed) hint.text = 'Queue Frost Bolt → Fireball for Steam Burst.';
+        else if (planning && battle.inspected >= 0 && battle.selected.length < 2) hint.text = cardDescription(battle.hand[battle.inspected]!,battle.handIds[battle.inspected] ?? undefined);
+        else if (battle.tutorial && planning && !battle.steamed) hint.text = 'Play Fire and Frost for Steam Burst.';
         else if (planning) {
-            const order = battle.selected.map(id => battle.hand[cardIndex(id)]);
-            const previews: string[] = [];
-            if (order[0] === 'guard') previews.push('Guard first');
-            for (let i=1;i<order.length;i++) {
-                const current = order[i], previous = order[i-1];
-                if (!current || !previous) continue;
-                const combo = reaction(previous,current);
-                if (combo) previews.push((discovered(combo) ? combo.toUpperCase() : 'UNKNOWN REACTION') + (['steam','overload','surge'].includes(combo) ? ' · all foes' : ' · target'));
+            const order = battle.selected.map(id => battle.hand[cardIndex(id)]!);
+            const levels=battle.selected.map(id=>cardLevel(id));
+            const plans=planReactions(order,levels);
+            const previews=plans.filter((id):id is NonNullable<typeof id>=>Boolean(id)).map(id=>discovered(id) ? COMBOS[id].name.toUpperCase()+' · '+COMBOS[id].effect : 'UNKNOWN REACTION');
+            for(let i=0;i+2<order.length;i++) {
+                const triple=TRIPLES.find(t=>t.cards.every((card,j)=>order[i+j]===card));
+                if(triple && levels.slice(i,i+3).some(level=>level<3)) previews.push('TRIPLE LOCKED · ALL CARDS LV 3');
             }
-            if (order.some((card,i) => card === 'dash' && order[i+1] === 'slash')) previews.push(discovered('lunge') ? 'Lunging Cleave' : 'Unknown sword combo');
-            if (order.some((card,i) => card === 'echo' && order[i+1] && order[i+1] !== 'echo')) previews.push('Echo repeats the next card');
             hint.text = previews.length ? previews.join('  ·  ') : 'Drag to reorder · tap × for discard-only.';
         }
         else if (phase === 'enemy') hint.text = 'Guard absorbs damage until the response ends.';
@@ -269,8 +270,8 @@ export function drawArena() {
             name.text = SHORT_NAME[id]; name.color = card.color;
             rarity.text=cardRarity(id).toUpperCase(); rarity.y=HAND_Y+23-(handLift[i]||0); rarity.color=RARITY_COLORS[cardRarity(id)];
             const level = cardLevel(battle.handIds[i] ?? undefined);
-            const amount = card.power + (level-1)*5;
-            const action = id === 'echo' ? 'Repeat' : id === 'dodge' ? 'Evade' : id === 'guard' || id === 'bulwark' ? amount+' block' :
+            const amount = card.power + (level-1)*ELEMENT_POWER_STEP;
+            const action = id === 'wind' ? amount+' + evade' : id === 'earth' ? (EARTH_BLOCK_BASE+(level-1)*EARTH_BLOCK_STEP)+' block' : id === 'echo' ? 'Repeat' : id === 'dodge' ? 'Evade' : id === 'guard' || id === 'bulwark' ? amount+' block' :
                 id === 'riposte' ? amount+' counter' : amount+' dmg';
             effect.text = queued >= 0 ? 'Queued '+(queued+1) : action+' · '+cardSize(id,battle.handIds[i] ?? undefined);
         });
@@ -353,13 +354,23 @@ export function drawArena() {
                 c.beginPath(); c.moveTo(previous.x,previous.y); c.lineTo(at.x,at.y); c.stroke();
                 circle(c,at.x,at.y,8,'#fff1cf',CARDS[s.card].color,0.95);
             });
-            if (stageCombo && time-comboAt < 0.48 && !preferences.reducedMotion) {
-                const at=foeStage(Math.max(0,stageCombo.target ?? 0)), age=(time-comboAt)/0.48;
-                c.save(); c.globalAlpha=Math.max(0,1-age); c.strokeStyle=stageCombo.color ?? '#ffdb91'; c.lineWidth=4;
-                if (stageCombo.text.includes('OVERLOAD') || stageCombo.text.includes('SURGE') || stageCombo.text.includes('SHATTER')) {
+            const isUltimate=Boolean(stageCombo && ['CATACLYSM','CRYSTAL BASTION','METEORFALL','ABSOLUTE TEMPEST'].includes(stageCombo.text));
+            const duration=isUltimate ? 0.9 : 0.52;
+            if (stageCombo && time-comboAt < duration && !preferences.reducedMotion) {
+                const at=foeStage(Math.max(0,stageCombo.target ?? 0)), age=(time-comboAt)/duration;
+                const name=stageCombo.text;
+                c.save(); c.globalAlpha=Math.max(0,1-age); c.strokeStyle=stageCombo.color ?? '#ffdb91'; c.lineWidth=isUltimate?7:4;
+                if (name.includes('BASTION') || name.includes('FORTRESS') || name.includes('MAGMA') || name.includes('MAGNETIC')) {
+                    c.strokeStyle=name.includes('MAGMA')?'#ff925e':'#a2eaff';
+                    for(let n=0;n<3;n++){c.beginPath();c.arc(HERO_STAGE.x,HERO_STAGE.y,60+n*21+age*8,0,TAU);c.stroke();}
+                } else if (name.includes('METEOR')) {
+                    const x=at.x-150+age*150,y=at.y-260+age*260;
+                    c.strokeStyle='#ffad5f';c.beginPath();c.moveTo(x-85,y-100);c.lineTo(x,y);c.stroke();circle(c,x,y,35,'#ffdd85','#fb773f',0.9);
+                } else if (name.includes('WIND') || name.includes('STORM') || name.includes('TEMPEST') || name.includes('CATACLYSM')) {
+                    for(let n=0;n<5;n++){const y=at.y-75+n*32;c.beginPath();c.moveTo(at.x-115,y);c.quadraticCurveTo(at.x,y-45+age*50,at.x+115,y);c.stroke();}
+                    if(name.includes('TEMPEST') || name.includes('CATACLYSM')) { c.strokeStyle='#fff298';c.beginPath();c.moveTo(at.x-20,at.y-130);c.lineTo(at.x+20,at.y-45);c.lineTo(at.x-10,at.y-35);c.lineTo(at.x+35,at.y+80);c.stroke(); }
+                } else if (name.includes('OVERLOAD') || name.includes('SURGE') || name.includes('SHATTER')) {
                     for (let n=0;n<5;n++) { const y=at.y-75+n*32; c.beginPath(); c.moveTo(at.x-105,y); c.lineTo(at.x-50,y-16); c.lineTo(at.x-23,y+10); c.lineTo(at.x+20,y-15); c.lineTo(at.x+90,y); c.stroke(); }
-                } else if (stageCombo.text.includes('CLEAVE') || stageCombo.text.includes('RIPOSTE') || stageCombo.text.includes('ECHO')) {
-                    for (let n=0;n<3;n++) { c.beginPath(); c.arc(at.x,at.y,45+n*22+age*20,-1.3,1.3); c.stroke(); }
                 } else {
                     for (let n=0;n<8;n++) { const a=n*TAU/8, r=35+age*100; c.beginPath(); c.moveTo(at.x+Math.cos(a)*r,at.y+Math.sin(a)*r); c.lineTo(at.x+Math.cos(a)*(r+25),at.y+Math.sin(a)*(r+25)); c.stroke(); }
                 }

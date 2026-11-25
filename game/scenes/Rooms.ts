@@ -53,7 +53,7 @@ export const Campfire = {
             const copies = run.deckIds.filter((_,index)=>run.deck[index]===selected);
             const level = cardLevel(selectedId);
             const prefix = 'Copy '+(copies.indexOf(selectedId)+1)+'/'+copies.length+' · Lv '+level+' · ';
-            tip.text = prefix+(level === 2 ? 'Lv 3 size '+cardSize(selected,selectedId)+' → '+(cardSize(selected,selectedId)+1)+'. '+evolutionEffect(selected) : level >= 3 ? 'Maximum level.' : CARDS[selected].tip);
+            tip.text = prefix+(level >= 5 ? 'Maximum level.' : level === 2 ? 'Lv 3: +3 damage'+(selected==='earth'?' and +2 barrier':'')+'; unlocks triples. Size stays '+cardSize(selected,selectedId)+'.' : 'Next level +3 damage'+(selected==='earth'?' and +2 barrier':'')+'. Size stays '+cardSize(selected,selectedId)+'.');
             tip.scale = Math.min(1,62/Math.max(tip.text.length,1));
         };
         let used = false;
@@ -77,7 +77,7 @@ export const Campfire = {
         });
         const apply = (isUpgrade: boolean): void => {
             if (!selected || used) { if (!used) tip.text = 'Choose a card above first.'; return; }
-            if (!isUpgrade && !remove(selected,selectedId)) { tip.text = 'Keep eight cards, including an attack and Guard.'; return; }
+            if (!isUpgrade && !remove(selected,selectedId)) { tip.text = 'Keep eight cards, including Earth or Wind.'; return; }
             if (isUpgrade) {
                 const before = cardLevel(selectedId);
                 upgrade(selected,selectedId);

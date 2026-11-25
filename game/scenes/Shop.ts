@@ -1,6 +1,6 @@
 import { game } from '../engine.js';
-import { buyGear, equipGear, GEAR, setCount, shopInventory, sellGear, unequipGear, type GearSlot } from '../equipment.js';
-import { run } from '../run.js';
+import { buyShopItem, equipGear, GEAR, setCount, shopInventory, shopItem, sellGear, unequipGear, type GearSlot } from '../equipment.js';
+import { completeRoom, run } from '../run.js';
 import { GOLD, INK, LOW, label, sprite } from '../ui/chrome.js';
 
 export const Shop = {
@@ -15,18 +15,18 @@ export const Shop = {
         let selected='';
         const ids=[...shopInventory()];
         const rows=Array.from({length:6},(_,i)=>game.ui.button({anchor:'top-left',x:50,y:170+i*100,w:620,h:78,z:90,text:'',onClick:()=>{selected=ids[i]??'';update();}}));
-        ids.forEach((id,i)=>sprite('icon-'+(GEAR[id].slot==='weapon' ? 'slash' : 'guard'),92,209+i*100,42,92));
+        ids.forEach((id,i)=>sprite('icon-'+(shopItem(id)?.icon ?? 'earth'),92,209+i*100,42,92));
         const update=():void => {
             gold.text='GOLD '+run.gold;
-            rows.forEach((row,i)=>{const id=ids[i], item=GEAR[id]; row.ui.text=item ? item.name+' · '+(item.slot==='weapon'?'RARE':'UNCOMMON')+' · '+(run.gearOwned.includes(id)?'OWNED':item.price+' GOLD') : '';row.ui.disabled=!item;});
-            const item=GEAR[selected];
+            rows.forEach((row,i)=>{const id=ids[i], item=shopItem(id), available=run.shopStock.includes(id); row.ui.text=item ? item.name+' · '+(item.slot==='card'?'ELEMENT':item.slot==='weapon'?'RARE':'UNCOMMON')+' · '+(available?item.price+' GOLD':'SOLD') : '';row.ui.disabled=!item || !available;});
+            const item=shopItem(selected);
             detail.text=item ? item.name+' · '+item.description : 'Choose an item to inspect it.';
             detail.scale=Math.min(1,60/Math.max(1,detail.text.length));
             sets.text='SENTINEL '+setCount('sentinel')+'/3 · EMBER '+setCount('ember')+'/3';
         };
-        game.ui.button({anchor:'bottom',x:-140,y:-210,h:65,z:90,text:'Buy',onClick:()=>{notice.text=buyGear(selected)?'Purchased.':'Unavailable or not enough gold.';update();}});
+        game.ui.button({anchor:'bottom',x:-140,y:-210,h:65,z:90,text:'Buy',onClick:()=>{notice.text=buyShopItem(selected)?'Purchased.':'Unavailable or not enough gold.';update();}});
         game.ui.button({anchor:'bottom',x:140,y:-210,h:65,z:90,text:'Equipment',onClick:()=>game.scenes.push('equipment')});
-        game.ui.button({anchor:'bottom',y:-110,h:65,z:90,text:'Back to map',onClick:()=>game.scenes.pop()});
+        game.ui.button({anchor:'bottom',y:-110,h:65,z:90,text:'Leave shop',onClick:()=>completeRoom()});
         update();
     },
 };
@@ -48,8 +48,8 @@ export const Equipment = {
         const update=():void=>{
             info.text=slots.map(slot=>slot.toUpperCase()+': '+(GEAR[run.equipped[slot]??'']?.name??'—')).join('  ·  ');
             info.scale=Math.min(1,67/Math.max(1,info.text.length));
-            setInfo.text='SENTINEL '+setCount('sentinel')+'/3: 2 +4 Guard, 3 +6 Riposte';
-            emberInfo.text='EMBER '+setCount('ember')+'/3: 2 +3 Fire, 3 +3 Sword';
+            setInfo.text='SENTINEL '+setCount('sentinel')+'/3: 2 +4 Earth block, 3 counter';
+            emberInfo.text='EMBER '+setCount('ember')+'/3: 2 +3 Fire, 3 Fire reaction +4';
             rows.forEach((row,i)=>{const id=run.gearOwned[page*6+i],item=GEAR[id];row.ui.text=item ? item.name+' · '+item.slot.toUpperCase()+(run.equipped[item.slot]===id?' · EQUIPPED':'') : ''; row.ui.hidden=!item;row.ui.disabled=!item;});
             if(selected && GEAR[selected]) { const slot=GEAR[selected].slot, old=GEAR[run.equipped[slot]??'']; help.text=GEAR[selected].name+' · '+GEAR[selected].description; compare.text='CURRENT '+(old?.name ?? 'none')+'  →  '+GEAR[selected].name; } else compare.text='';
             help.scale=Math.min(1,65/Math.max(1,help.text.length));

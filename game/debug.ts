@@ -6,14 +6,14 @@ import { addCard, CARDS, endRun, grant, MAX_HP, PIPS, reset, run, type Card, typ
 const normalize = (value: string): string => value.toLowerCase().replace(/[^a-z]/g,'');
 const argText = (parts: string[]): string => parts.join(' ');
 const floor = (value: string | undefined): number => Math.max(1,Math.min(3,Math.floor(Number(value) || 1)));
-const rooms: Room[] = ['monster','cursed','treasure','campfire','boss'];
+const rooms: Room[] = ['monster','cursed','treasure','campfire','boss','shop'];
 const items: Item[] = ['heart-gem','relic-charm','card-scroll'];
 let initialized = false;
 
 function arena(room: Room, enemy?: Parameters<typeof initBattle>[0]): void {
     run.node = null;
     run.room = room;
-    if (room === 'campfire' || room === 'treasure') game.scenes.go(room);
+    if (room === 'campfire' || room === 'treasure' || room === 'shop') game.scenes.go(room);
     else {
         initBattle(enemy);
         game.scenes.go('play');
@@ -71,6 +71,7 @@ export function addDebugControls(): void {
         }
         return 'Added '+CARDS[id].name;
     });
+    add('card-level','Set a hand card level for testing','slot level',(slot,level)=>{const index=Math.max(0,Math.floor(Number(slot))-1),id=battle.handIds[index];if(id==null)return 'No card in slot';run.levels[id]=Math.max(1,Math.min(5,Math.floor(Number(level)||1)));return 'Card level '+run.levels[id];});
     add('give','Grant an item','item',name=>{
         const item = items.find(known=>known===name);
         return item ? grant(item) : 'Use '+items.join(', ');

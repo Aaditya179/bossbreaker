@@ -143,6 +143,13 @@ function icon(c: Ctx, id: string, color: string): void {
         poly(c,shine,[12,2,12,9,6,13,5,7]);
         poly(c,id === 'frost' ? '#3894b0' : '#754077',[12,9,19,7,20,13,12,21]);
         if (id === 'cursed') rect(c,10,7,3,9,shine);
+    } else if (id === 'wind') {
+        poly(c,color,[2,9,13,3,21,5,23,10,19,14,8,14,13,11,19,11,20,8,16,6,7,11]);
+        poly(c,shine,[3,17,15,15,21,17,20,20,11,21,15,19,19,19,18,17]);
+    } else if (id === 'earth') {
+        poly(c,dark,[2,9,8,3,17,3,22,9,20,19,13,24,4,20]);
+        poly(c,color,[4,10,9,5,16,5,20,10,18,18,13,21,6,18]);
+        poly(c,shine,[7,9,10,6,13,6,10,12]);
     } else if (id === 'storm') {
         poly(c,color,[13,0,4,13,10,13,7,24,21,9,14,9,18,0]);
         poly(c,shine,[12,3,7,11,12,11,10,18,18,10,13,10,16,3]);
@@ -157,7 +164,7 @@ function icon(c: Ctx, id: string, color: string): void {
     } else if (id === 'boss') {
         poly(c,color,[2,5,7,10,12,3,17,10,22,5,20,19,4,19]);
         rect(c,4,20,16,2,'#a26a4b'); rect(c,11,11,2,4,shine);
-    } else if (id === 'treasure') {
+    } else if (id === 'treasure' || id === 'shop') {
         poly(c,'#663c39',[1,8,4,4,20,4,23,8,23,21,1,21]);
         rect(c,1,8,22,4,color); rect(c,4,5,16,2,'#c88a54'); rect(c,2,14,20,4,'#91604a');
         rect(c,10,11,5,6,color); rect(c,12,13,1,2,dark);
@@ -225,7 +232,7 @@ export function paintArt(): void {
         poly(c,'#b5e992',[19,27,22,24,28,24,31,29,28,35,21,36,18,32]);
         rect(c,21,25,5,3,'#eff7b8'); rect(c,12,26,3,3,'#86cda0'); rect(c,32,35,4,2,'#86cda0');
     });
-    const mapColors = { monster: '#e88987', cursed: '#d695f4', treasure: '#f7c076', campfire: '#fead7e', boss: '#f0c676', heart: '#ff777a', spark: '#f4d487' };
+    const mapColors = { shop:'#a8d7b3', monster: '#e88987', cursed: '#d695f4', treasure: '#f7c076', campfire: '#fead7e', boss: '#f0c676', heart: '#ff777a', spark: '#f4d487' };
     for (const [id,color] of Object.entries(mapColors)) game.paint('icon-'+id,72,72,c => {c.scale(3,3);icon(c,id,color);});
     for (const [id,card] of Object.entries(CARDS)) {
         game.paint('icon-'+id,72,72,c => {c.scale(3,3);icon(c,id,card.color);});
@@ -254,6 +261,8 @@ export function paintArt(): void {
 
 export function defineSounds(): void {
     game.sound.defineAll({
+        wind: { type:'noise',duration:0.12,volume:0.18 },
+        earth: { type:'triangle',freq:130,freqEnd:70,duration:0.17,volume:0.22 },
         sovereign: { type:'noise',duration:0.2,volume:0.25 },
         immolate: { type:'sawtooth',freq:220,freqEnd:80,duration:0.18,volume:0.2 },
         bulwark: { type:'triangle',notes:[400,700,900],duration:0.22,volume:0.2 },

@@ -25,10 +25,11 @@
     "credits": "node phaser/cli/bin/phaser-ae.mjs credits",
     "gdd": "node phaser/cli/bin/phaser-ae.mjs gdd",
     "idea": "node phaser/cli/bin/phaser-ae.mjs idea",
-    "test": "node tests/combat.mjs",
+    "test": "node tests/elemental.mjs",
     "test:mobile": "node tests/mobile.mjs",
     "test:interactions": "node tests/interactions.mjs",
     "test:shop": "node tests/shop-mobile.mjs",
-    "test:rewards": "node tests/reward-reroll.mjs"
+    "test:rewards": "node tests/reward-reroll.mjs",
+    "test:map": "node tests/map-shop.mjs"
   }
 }

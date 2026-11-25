@@ -24,6 +24,7 @@ export const Play = {
         let time = 0;
         let reward = '';
         let done = false;
+        let clearReady = false;
         let lossScheduled = false;
         let focus = -1;
         let picked = -1;
@@ -79,7 +80,10 @@ export const Play = {
             battle.inspected=to; battle.redraw++; battle.note='Hand reordered.';
         };
         const advance = (): boolean => {
-            if (battle.phase === 'clear' && done) { game.scenes.go('reward'); return true; }
+            if (battle.phase === 'clear' && done) {
+                if (!clearReady) { battle.note = 'Finishing the final impact…'; return false; }
+                game.scenes.go('reward'); return true;
+            }
             if (battle.phase !== 'plan') return false;
             if (!battle.selected.length) { battle.note = 'Select cards to play, or use Pass Turn.'; return false; }
             if (queueSelected()) execute();
@@ -181,6 +185,7 @@ export const Play = {
             }
             if (battle.phase === 'clear' && !done) {
                 done = true;
+                game.after(preferences.fast ? 0.45 : 0.9, () => { clearReady = true; });
                 if (battle.tutorial) {
                     game.save.write('tutorialSeen', true);
                     run.tutorial = false;

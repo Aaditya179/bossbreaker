@@ -41,7 +41,7 @@ try {
         let battle = await state();
         assert.equal(battle.pips,2);
         assert.equal(battle.hand.length,6);
-        assert.equal(battle.draw.length,5);
+        assert.equal(battle.draw.length,6);
         assert.equal(battle.spent.length,3);
         const first = battle.handIds[0], second = battle.handIds[1];
         await tap(64,1071); await tap(182,1071);

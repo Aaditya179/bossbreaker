@@ -1,7 +1,7 @@
 import { cardVisual } from '../ui/cards.js';
 import { game } from '../engine.js';
 import { battle } from '../arena.js';
-import { CARDS, cardFamily, cardLevel, cardRarity, cardSize, evolutionEffect, RELICS, run, saleValue, sellCard, type Card } from '../run.js';
+import { CARDS, cardDescription, cardFamily, cardLevel, cardRarity, cardSize, evolutionEffect, RELICS, run, saleValue, sellCard, type Card } from '../run.js';
 import { GOLD, INK, label, LOW } from '../ui/chrome.js';
 
 
@@ -61,14 +61,13 @@ export const Deck = {
                 row.badge.visible=Boolean(id); row.badge.text='×'+count;
             });
             if (!selected) { sale.text = canSell ? 'Sell the final copy to free its family slot.' : 'Sell from the map or a rest room.'; return; }
-            detail.text = CARDS[selected].tip;
+            detail.text = cardDescription(selected,selectedId);
             detail.scale = Math.min(1, 60/Math.max(detail.text.length,1));
             const ids = run.deckIds.filter((_,index) => run.deck[index]===selected);
             if (!ids.includes(selectedId)) selectedId = ids[0] ?? -1;
             copy.text = ids.length ? 'COPY '+(ids.indexOf(selectedId)+1)+'/'+ids.length+' · Lv '+cardLevel(selectedId)+' · Size '+cardSize(selected,selectedId)+' · '+cardRarity(selected) : 'No copies owned';
             copy.scale = Math.min(1,75/Math.max(copy.text.length,1));
-            evolution.text = cardLevel(selectedId) >= 3 ? evolutionEffect(selected) :
-                cardLevel(selectedId) === 2 ? 'Lv 3: size '+cardSize(selected,selectedId)+' → '+(cardSize(selected,selectedId)+1)+' · '+evolutionEffect(selected) : '';
+            evolution.text = cardLevel(selectedId) >= 5 ? 'Maximum level.' : cardLevel(selectedId) === 2 ? 'Level 3 unlocks triples · size unchanged.' : evolutionEffect(selected);
             evolution.scale = Math.min(1,68/Math.max(evolution.text.length,1));
             sale.text = !canSell ? 'Sell from the map or a rest room.' : confirm ? 'Tap Sell again to confirm.' : 'Sale value: '+saleValue(selectedId)+' gold';
         };

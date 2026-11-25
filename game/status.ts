@@ -7,7 +7,7 @@ export const STATUS_RULES: Record<Status, { max: number; turns: number; descript
     burn: { max: 5, turns: 2, description: 'Lose 3 health per stack after the enemy response.' },
     chill: { max: 2, turns: 2, description: 'Attacks deal 4 less per stack.' },
     paralysis: { max: 1, turns: 1, description: 'Combo capacity is reduced by 1 next turn.' },
-    silence: { max: 1, turns: 1, description: 'Elemental cards cannot be queued next turn.' },
+    silence: { max: 1, turns: 1, description: 'Fire and Storm cannot be played next turn; other elements remain available.' },
     weaken: { max: 2, turns: 2, description: 'Attacks deal 3 less per stack.' },
     armorBreak: { max: 2, turns: 2, description: 'Incoming hits deal 3 more per stack.' },
 };

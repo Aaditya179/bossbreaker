@@ -11,7 +11,7 @@ const position = (n: Node) => ({ x: 360+LANE_GAP*n.lane, y: NODE_Y-ROW_GAP*n.row
 export function openNode(node: Node): void {
     run.node = node;
     run.room = node.room;
-    if (node.room === 'treasure' || node.room === 'campfire') game.scenes.go(node.room);
+    if (node.room === 'treasure' || node.room === 'campfire' || node.room === 'shop') game.scenes.go(node.room);
     else {
         initBattle();
         game.scenes.go('play');
@@ -56,7 +56,6 @@ export const Map = {
             label(passed ? 'CLEARED' : active ? 'ENTER' : ROOMS[node.room].toUpperCase(),x,y+34,15,active ? GOLD : LOW,'mono-bold');
             if (active) label(node.room === 'boss' ? BOSSES[run.floor-1] : ROOMS[node.room],x,y+73,20);
         }
-        game.ui.button({anchor:'bottom',x:-140,y:-220,h:64,text:'Shop',onClick:()=>game.scenes.push('shop')});
         game.ui.button({anchor:'bottom',x:140,y:-220,h:64,text:'Equipment',onClick:()=>game.scenes.push('equipment')});
         sprite('icon-heart',72,1123,32);
         label(run.hp+' / '+run.maxHp,98,1123,25,INK,'mono-bold','left');
