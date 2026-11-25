@@ -1,12 +1,12 @@
 import { preferences } from '../ui/preferences.js';
 import { cardVisual } from '../ui/cards.js';
 import { game } from '../engine.js';
-import { addCard, CARDS, EARTH_BLOCK_BASE, EARTH_BLOCK_STEP, ELEMENTS, ELEMENT_POWER_STEP, cardFamily, cardLevel, cardRarity, cardSize, completeRoom, evolutionEffect, RELICS, rewardWeight, run, upgrade, type Card } from '../run.js';
+import { CARDS, EARTH_BLOCK_BASE, EARTH_BLOCK_STEP, ELEMENTS, ELEMENT_POWER_STEP, FAMILY_LIMIT, MAX_CASTS, UNLOCK_COPIES, cardLevel, completeRoom, RELICS, run, unlockElement, upgrade, type Card, type Element } from '../run.js';
 import { backdrop, chapter, floorHeading, GOLD, INK, label, LOW, menuInput, sprite, topButtons } from '../ui/chrome.js';
 
 let rerollCount = 0;
 let rerolling = false;
-let previousCard: Card | null = null;
+let previousCard: Element | null = null;
 let previousUpgrade: number | undefined;
 
 export const Reward = {
@@ -19,23 +19,18 @@ export const Reward = {
         if (!wasReroll) { rerollCount=0; previousCard=null; previousUpgrade=undefined; }
         rerolling=false;
         floorHeading(chapter(),boss ? 'Boss defeated' : 'Choose a reward');
-        const headline = label(boss ? '+1 combo capacity earned' : 'Choose one reward for this run.',360,185,23,GOLD);
+        const headline = label(boss ? 'Maximum casts: '+run.capacity+' / '+MAX_CASTS : 'Choose one reward for this run.',360,185,23,GOLD);
         if (boss) game.tween.to(headline,{scale:1.08},{duration:0.6,yoyo:true,loop:true});
-        const owned = [...new Set(run.deck)];
-        const families = new Set(run.deck.map(cardFamily));
-        const candidates = ([...ELEMENTS] as Card[]).filter(card =>
-            cardSize(card,-1) <= run.capacity && !['Mythical','Legendary','Cursed'].includes(cardRarity(card)) && (families.size < 5 || families.has(cardFamily(card))));
-        const pool = candidates.length ? candidates : owned;
-        const alternativeCards = wasReroll && pool.length > 1 ? pool.filter(card=>card!==previousCard) : pool;
-        const newCard = game.rng.weighted(alternativeCards.map(card => [card,rewardWeight(card)] as const));
+        const unlocked = ELEMENTS.filter(element=>run.mastery[element]>0);
+        const locked = ELEMENTS.filter(element=>run.mastery[element]===0);
+        const alternatives=locked.filter(element=>element!==previousCard);
+        const newCard = unlocked.length < FAMILY_LIMIT && locked.length ? game.rng.pick(wasReroll && alternatives.length ? alternatives : locked) : null;
         previousCard=newCard;
-        const eligible = run.deckIds.filter((id,i) => cardLevel(id) < 5 && (ELEMENTS as readonly string[]).includes(run.deck[i]));
-        const alternatives = wasReroll && eligible.length > 1 ? eligible.filter(id=>id!==previousUpgrade) : eligible;
-        const upgradeId = alternatives.length ? game.rng.pick(alternatives) : undefined;
+        const eligible = unlocked.filter(element=>run.mastery[element]<5);
+        const alternativeUpgrades=eligible.filter(element=>run.deckIds[run.deck.indexOf(element)]!==previousUpgrade);
+        const upgradeCard = eligible.length ? game.rng.pick(wasReroll && alternativeUpgrades.length ? alternativeUpgrades : eligible) : null;
+        const upgradeId = upgradeCard ? run.deckIds[run.deck.indexOf(upgradeCard)] : undefined;
         previousUpgrade=upgradeId;
-        const upgradeCard = upgradeId !== undefined ? run.deck[run.deckIds.indexOf(upgradeId)] : null;
-        const upgradeValue = (card: Card, level: number): number => card === 'dodge' ? (level-1)*4 :
-            CARDS[card].power+(level-1)*5+(card === 'guard' && level >= 3 ? 4 : 0);
         const signature=4+run.floor-1;
         const extras=[7,8,9,10,0,1,2].filter(id=>id!==signature && !run.relics.includes(id));
         const bossRelics=[signature,...extras.slice(0,2)];
@@ -44,9 +39,9 @@ export const Reward = {
             detail:RELICS[id].tip, icon:'treasure',
             act:()=>{if(!run.relics.includes(id)){run.relics.push(id);run.stats.relics++;} return true;},
         })) : [
-            { title:'Add '+CARDS[newCard].name, detail:CARDS[newCard].tip, icon:newCard, act:() => { if (addCard(newCard) >= 0) run.stats.cards++; } },
+            newCard ? { title:'Unlock '+CARDS[newCard].name, detail:CARDS[newCard].tip+' Adds '+UNLOCK_COPIES+' cards.', icon:newCard, act:() => unlockElement(newCard) } : {title:'Vital Spark',detail:'Gain 5 maximum health and restore 5.',icon:'heart',act:()=>{run.maxHp+=5;run.hp+=5;}},
             { title:upgradeCard ? 'Upgrade '+CARDS[upgradeCard].name : 'Fortitude',
-                detail:upgradeCard ? 'Level '+cardLevel(upgradeId)+' → '+(cardLevel(upgradeId)+1)+' · Power '+(CARDS[upgradeCard].power+(cardLevel(upgradeId)-1)*ELEMENT_POWER_STEP)+' → '+(CARDS[upgradeCard].power+cardLevel(upgradeId)*ELEMENT_POWER_STEP)+(upgradeCard==='earth' ? ' · Block '+(EARTH_BLOCK_BASE+(cardLevel(upgradeId)-1)*EARTH_BLOCK_STEP)+' → '+(EARTH_BLOCK_BASE+cardLevel(upgradeId)*EARTH_BLOCK_STEP) : '')+' · Size unchanged'+(cardLevel(upgradeId)===2?' · Triple eligible':'')
+                detail:upgradeCard ? 'Level '+cardLevel(upgradeId)+' → '+(cardLevel(upgradeId)+1)+' · Power '+(CARDS[upgradeCard].power+(cardLevel(upgradeId)-1)*ELEMENT_POWER_STEP)+' → '+(CARDS[upgradeCard].power+cardLevel(upgradeId)*ELEMENT_POWER_STEP)+(upgradeCard==='earth' ? ' · Block '+(EARTH_BLOCK_BASE+(cardLevel(upgradeId)-1)*EARTH_BLOCK_STEP)+' → '+(EARTH_BLOCK_BASE+cardLevel(upgradeId)*EARTH_BLOCK_STEP) : '')+' · All copies'+(cardLevel(upgradeId)===2?' · Triple eligible':'')
                     : 'Gain 8 maximum health and restore 8.',
 
                 icon:upgradeCard ?? 'slash', act:() => {

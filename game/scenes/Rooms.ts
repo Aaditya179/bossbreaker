@@ -41,19 +41,19 @@ export const Campfire = {
         floorHeading(chapter(),'Campfire Rest');
         const flame = sprite('icon-campfire',360,342,190,1);
         game.tween.to(flame,{scale:flame.scale*1.06},{duration:0.52,yoyo:true,loop:true});
-        label('Select a card to upgrade or remove.',360,434,24);
+        label('Upgrade an element or remove one card.',360,434,24);
         const types = [...new Set(run.deck)];
         const entries: Parameters<typeof menuInput>[0] = [];
         const outlines: ReturnType<typeof sprite>[] = [];
-        const tip = label('Choose a card, then cycle through its copies.',360,914,20,LOW);
+        const tip = label('Choose an element; mastery affects every copy.',360,914,20,LOW);
         let selected: Card | undefined;
         let selectedId = -1;
         const showCopy = (): void => {
             if (!selected) return;
             const copies = run.deckIds.filter((_,index)=>run.deck[index]===selected);
             const level = cardLevel(selectedId);
-            const prefix = 'Copy '+(copies.indexOf(selectedId)+1)+'/'+copies.length+' · Lv '+level+' · ';
-            tip.text = prefix+(level >= 5 ? 'Maximum level.' : level === 2 ? 'Lv 3: +3 damage'+(selected==='earth'?' and +2 barrier':'')+'; unlocks triples. Size stays '+cardSize(selected,selectedId)+'.' : 'Next level +3 damage'+(selected==='earth'?' and +2 barrier':'')+'. Size stays '+cardSize(selected,selectedId)+'.');
+            const prefix = 'All copies · Lv '+level+' · ';
+            tip.text = prefix+(level >= 5 ? 'Maximum level.' : level === 2 ? 'Lv 3: +3 damage'+(selected==='earth'?' and +2 barrier':'')+'; unlocks triples. All copies improve.' : 'Next level +3 damage'+(selected==='earth'?' and +2 barrier':'')+'. All copies improve.');
             tip.scale = Math.min(1,62/Math.max(tip.text.length,1));
         };
         let used = false;
@@ -77,11 +77,11 @@ export const Campfire = {
         });
         const apply = (isUpgrade: boolean): void => {
             if (!selected || used) { if (!used) tip.text = 'Choose a card above first.'; return; }
-            if (!isUpgrade && !remove(selected,selectedId)) { tip.text = 'Keep eight cards, including Earth or Wind.'; return; }
+            if (!isUpgrade && !remove(selected,selectedId)) { tip.text = 'Keep eight cards and one of each element.'; return; }
             if (isUpgrade) {
                 const before = cardLevel(selectedId);
                 upgrade(selected,selectedId);
-                if (cardLevel(selectedId) === before) { tip.text = 'Upgrade unavailable at current capacity.'; return; }
+                if (cardLevel(selectedId) === before) { tip.text = 'Already at maximum mastery.'; return; }
             }
             used = true;
             tip.text = CARDS[selected].name + (isUpgrade ? ' upgraded.' : ' removed from the deck.');

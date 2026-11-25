@@ -55,7 +55,7 @@ export const Play = {
             if (selected < 0) {
                 const used = battle.selected.reduce((sum,cardId) => sum+cardSize(battle.hand[cardIndex(cardId)]!,cardId),0);
                 const need = cardSize(battle.hand[index]!,id), remaining = maxCapacity()-used;
-                if (need > remaining) { battle.rejectedId=id; game.after(0.5,()=>{ if (battle.rejectedId===id) battle.rejectedId=-1; }); battle.note = 'Not enough Combo Capacity — need '+need+', have '+remaining+'.'; return; }
+                if (need > remaining) { battle.rejectedId=id; game.after(0.5,()=>{ if (battle.rejectedId===id) battle.rejectedId=-1; }); battle.note = 'Not enough casts — need '+need+', have '+remaining+'.'; return; }
                 battle.discardOnly = battle.discardOnly.filter(cardId => cardId !== id);
                 battle.selected.push(id); battle.selected.sort((a,b)=>cardIndex(a)-cardIndex(b)); battle.targets[id] = battle.target;
             } else { battle.selected.splice(selected, 1); delete battle.targets[id]; }
@@ -70,7 +70,7 @@ export const Play = {
             if (selected >= 0) { battle.selected.splice(selected,1); delete battle.targets[id]; }
             const marked=battle.discardOnly.indexOf(id);
             if (marked >= 0) battle.discardOnly.splice(marked,1); else battle.discardOnly.push(id);
-            battle.note='Discard marks do not use capacity.'; game.sound.play('select');
+            battle.note='Discard marks do not use casts.'; game.sound.play('select');
         };
         const moveHand = (from: number, to: number): void => {
             if (from===to || from<0 || to<0) return;

@@ -1,4 +1,4 @@
-import { COMBOS, discovered } from '../combos.js';
+import { COMBOS } from '../combos.js';
 import { preferences } from './preferences.js';
 import { cardVisual, RARITY_COLORS } from './cards.js';
 import { combatFeedback } from './feedback.js';
@@ -209,15 +209,15 @@ export function drawArena() {
         if (clear) hint.text = reward;
         else if (planning && battle.note) hint.text = battle.note;
         else if (planning && battle.inspected >= 0 && battle.selected.length < 2) hint.text = cardDescription(battle.hand[battle.inspected]!,battle.handIds[battle.inspected] ?? undefined);
-        else if (battle.tutorial && planning && !battle.steamed) hint.text = 'Play Fire and Frost for Steam Burst.';
+        else if (battle.tutorial && planning && !battle.steamed && battle.selected.length < 2) hint.text = 'Select elements, then tap Play Combo.';
         else if (planning) {
             const order = battle.selected.map(id => battle.hand[cardIndex(id)]!);
             const levels=battle.selected.map(id=>cardLevel(id));
             const plans=planReactions(order,levels);
-            const previews=plans.filter((id):id is NonNullable<typeof id>=>Boolean(id)).map(id=>discovered(id) ? COMBOS[id].name.toUpperCase()+' · '+COMBOS[id].effect : 'UNKNOWN REACTION');
+            const previews=plans.filter((id):id is NonNullable<typeof id>=>Boolean(id)).map(id=>COMBOS[id].name.toUpperCase()+' · '+COMBOS[id].effect);
             for(let i=0;i+2<order.length;i++) {
                 const triple=TRIPLES.find(t=>t.cards.every((card,j)=>order[i+j]===card));
-                if(triple && levels.slice(i,i+3).some(level=>level<3)) previews.push('TRIPLE LOCKED · ALL CARDS LV 3');
+                if(triple && levels.slice(i,i+3).some(level=>level<3)) { const missing=triple.cards.filter((_,j)=>levels[i+j]<3); previews.push(COMBOS[triple.id].name.toUpperCase()+' LOCKED · '+[...new Set(missing)].join('/')+' needs Lv 3'); }
             }
             hint.text = previews.length ? previews.join('  ·  ') : 'Drag to reorder · tap × for discard-only.';
         }
@@ -273,7 +273,7 @@ export function drawArena() {
             const amount = card.power + (level-1)*ELEMENT_POWER_STEP;
             const action = id === 'wind' ? amount+' + evade' : id === 'earth' ? (EARTH_BLOCK_BASE+(level-1)*EARTH_BLOCK_STEP)+' block' : id === 'echo' ? 'Repeat' : id === 'dodge' ? 'Evade' : id === 'guard' || id === 'bulwark' ? amount+' block' :
                 id === 'riposte' ? amount+' counter' : amount+' dmg';
-            effect.text = queued >= 0 ? 'Queued '+(queued+1) : action+' · '+cardSize(id,battle.handIds[i] ?? undefined);
+            effect.text = queued >= 0 ? 'Queued '+(queued+1) : action+' · Lv '+level;
         });
         shownTurn = battle.turn;
         shownRedraw = battle.redraw;
@@ -282,7 +282,7 @@ export function drawArena() {
             base.visible = number.visible = Boolean(id);
             if (id) base.texture='card-'+id;
             miniEffect.visible=rarity.visible=Boolean(id);
-            if (id) { miniEffect.text='SIZE '+cardSize(id,phase==='execute' ? battle.sequenceIds[i] : battle.selected[i]); rarity.text=cardRarity(id).toUpperCase(); rarity.color=RARITY_COLORS[cardRarity(id)]; }
+            if (id) { miniEffect.text='1 CAST'; rarity.text=cardRarity(id).toUpperCase(); rarity.color=RARITY_COLORS[cardRarity(id)]; }
             base.tint = focus === 5+i || (phase === 'execute' && i === battle.activeSlot && id) ? '#9de8ff' : '#ffffff';
             const active=phase === 'execute' && i === battle.activeSlot && Boolean(id);
             base.y=SLOT_Y+20-(active ? 15 : 0); icon.y=SLOT_Y+12-(active ? 15 : 0); name.y=SLOT_Y-17-(active ? 15 : 0); number.y=SLOT_Y+5-(active ? 15 : 0); miniEffect.y=SLOT_Y+59-(active ? 15 : 0); rarity.y=SLOT_Y+38-(active ? 15 : 0);
@@ -309,7 +309,7 @@ export function drawArena() {
         executeButton.alpha = clear || planning && selectedSize > 0 && selectedSize <= maxCapacity() ? 1 : 0.45;
         footer.text = planning ? 'PLAY '+battle.selected.length+' · × DISCARD '+battle.discardOnly.length+'  '+Object.entries(battle.statuses).map(([key,value])=>key+' '+value?.stacks).join(' ') : '';
         capacityLabel.color = planning && selectedSize > maxCapacity() ? HOT : GOLD;
-        capacityLabel.text = (planning && selectedSize > maxCapacity() ? 'OVER CAPACITY: REMOVE '+(selectedSize-maxCapacity())+' · ' : 'COMBO CAPACITY  ')+(planning ? selectedSize : battle.sequence.reduce((sum,card,i) => sum + cardSize(card,battle.sequenceIds[i]),0))+' / '+maxCapacity();
+        capacityLabel.text = (planning && selectedSize > maxCapacity() ? 'TOO MANY CASTS: REMOVE '+(selectedSize-maxCapacity())+' · ' : 'ELEMENTAL CASTS  ')+(planning ? selectedSize : battle.sequence.reduce((sum,card,i) => sum + cardSize(card,battle.sequenceIds[i]),0))+' / '+maxCapacity();
         capacityBar.clear();
         capacityBar.draw(c => {
             const cards = planning ? battle.selected.map(id => ({ card:battle.hand[cardIndex(id)]!, id })) :
@@ -347,7 +347,11 @@ export function drawArena() {
         fpsInk.clear();
         fpsInk.draw(c => {
             c.save(); c.translate(0,-136);
-            if (battle.barrier) circle(c,HERO_STAGE.x,HERO_STAGE.y,66+Math.sin(time*7)*2,'#ace8ef','#85dcec',0.27);
+            if (battle.barrier) {
+                const magma=Boolean(battle.powerUsed.magmaArmor);
+                circle(c,HERO_STAGE.x,HERO_STAGE.y,66+Math.sin(time*7)*2,magma?'#e77845':'#ace8ef',magma?'#ffd48b':'#85dcec',0.27);
+                if(magma) circle(c,HERO_STAGE.x,HERO_STAGE.y,72,'#00000000','#ff9d52',0.45);
+            }
             battle.shots.forEach(s => {
                 const at=stagePoint(s), previous=stagePoint({x:s.x-s.aim.x*28,y:s.y-s.aim.y*28});
                 c.lineCap = 'round'; c.lineWidth = s.card==='fire' ? 15 : 8; c.strokeStyle = CARDS[s.card].color;

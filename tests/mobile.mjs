@@ -15,7 +15,7 @@ try {
         });
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
-        await page.goto('http://localhost:4173/', { waitUntil:'domcontentloaded' });
+        await page.goto(process.env.BOSSBREAKER_URL ?? 'http://localhost:4173/', { waitUntil:'domcontentloaded' });
         await page.waitForFunction(() => window.game?.scenes?.current === 'title' && window.game.isReady);
         await page.waitForTimeout(350);
         const canvas = page.locator('canvas').first();
@@ -29,6 +29,9 @@ try {
             return page.evaluate(() => window.game.inspect().state.battle);
         }
         await tap(360,1055);
+        await page.waitForFunction(() => window.game.scenes.current === 'starting-element');
+        await page.waitForTimeout(350);
+        await tap(150,430);
         await page.waitForFunction(() => window.game.scenes.current === 'map');
         await page.waitForTimeout(350);
         await tap(360,934);
@@ -41,7 +44,7 @@ try {
         let battle = await state();
         assert.equal(battle.pips,2);
         assert.equal(battle.hand.length,6);
-        assert.equal(battle.draw.length,6);
+        assert.equal(battle.draw.length,3);
         assert.equal(battle.spent.length,3);
         const first = battle.handIds[0], second = battle.handIds[1];
         await tap(64,1071); await tap(182,1071);

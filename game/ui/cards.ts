@@ -20,7 +20,7 @@ export function cardVisual(x:number,y:number,width=108,id='card',z=1,onTap?:()=>
         base.texture='card-'+card; icon.texture='icon-'+card;
         name.text=CARDS[card].name; name.scale=Math.min(1,13/Math.max(1,name.text.length));
         name.color=CARDS[card].color;
-        effect.text='LV '+cardLevel(instance)+' · SIZE '+cardSize(card,instance);
+        effect.text='LV '+cardLevel(instance);
         rarity.text=cardRarity(card).toUpperCase();rarity.color=RARITY_COLORS[cardRarity(card)];
     };
     return {base,icon,name,effect,badge,discardMark,inspectMark,rarity,show};

@@ -1,7 +1,9 @@
 import { cardVisual } from '../ui/cards.js';
+import { reaction } from '../elements.js';
+import { COMBOS } from '../combos.js';
 import { game } from '../engine.js';
 import { battle } from '../arena.js';
-import { CARDS, cardDescription, cardFamily, cardLevel, cardRarity, cardSize, evolutionEffect, RELICS, run, saleValue, sellCard, type Card } from '../run.js';
+import { CARDS, ELEMENTS, FAMILY_LIMIT, isElement, cardDescription, cardFamily, cardLevel, cardRarity, cardSize, evolutionEffect, RELICS, run, saleValue, sellCard, type Card } from '../run.js';
 import { GOLD, INK, label, LOW } from '../ui/chrome.js';
 
 
@@ -28,7 +30,7 @@ export const Deck = {
         let selectedId = -1;
         let confirm = false;
         let relicCursor = -1;
-        let types = (Object.keys(CARDS) as Card[]).filter(card => run.deck.includes(card));
+        let types: Card[] = [...ELEMENTS, ...(Object.keys(CARDS) as Card[]).filter(card=>!isElement(card) && run.deck.includes(card))];
         let page = 0;
         const rows = Array.from({length:6},(_,i) => {
             const x=140+(i%3)*220, y=320+Math.floor(i/3)*245;
@@ -40,7 +42,7 @@ export const Deck = {
         let sortMode=0, familyIndex=0;
         const refreshTypes=():void=>{
             const families=['',...new Set(run.deck.map(cardFamily))]; familyIndex%=families.length;
-            types=(Object.keys(CARDS) as Card[]).filter(card=>run.deck.includes(card) && (!families[familyIndex] || cardFamily(card)===families[familyIndex]));
+            types=([...ELEMENTS,...(Object.keys(CARDS) as Card[]).filter(card=>!isElement(card) && run.deck.includes(card))] as Card[]).filter(card=>!families[familyIndex] || cardFamily(card)===families[familyIndex]);
             const rarityOrder=['Common','Uncommon','Rare','Epic','Mythical','Legendary','Cursed'];
             types.sort((a,b)=>sortMode===0 ? CARDS[a].name.localeCompare(CARDS[b].name) : sortMode===1 ? rarityOrder.indexOf(cardRarity(a))-rarityOrder.indexOf(cardRarity(b)) : sortMode===2 ? cardFamily(a).localeCompare(cardFamily(b)) : cardSize(a)-cardSize(b));
         };
@@ -52,29 +54,31 @@ export const Deck = {
             queued.text = combat ? 'SELECTED '+battle.selected.length+'  ·  QUEUE  '+battle.queue.map(id => CARDS[battle.hand[battle.handIds.indexOf(id)]!]?.name ?? 'Executed').join(' / ') : '';
             queued.scale = Math.min(1, 60/Math.max(queued.text.length,1));
             const names = [...new Set(run.deck.map(card => cardFamily(card)))];
-            families.text = 'FAMILIES '+names.length+'/5   '+names.join(' / ');
+            families.text = 'FAMILIES '+names.length+'/'+FAMILY_LIMIT+'   '+names.join(' / ');
             families.scale = Math.min(1,60/Math.max(families.text.length,1));
             rows.forEach((row,i) => {
                 const id = types[page*6+i];
                 const count = id ? run.deck.filter(card => card===id).length : 0;
                 row.show(id ?? null,id ? run.deckIds[run.deck.indexOf(id)] : undefined);
-                row.badge.visible=Boolean(id); row.badge.text='×'+count;
+                row.badge.visible=Boolean(id); row.badge.text=count ? '×'+count : 'LOCKED'; row.base.alpha=count ? 1 : 0.45; row.icon.alpha=count ? 1 : 0.45; if(id && !count) row.effect.text='LOCKED';
             });
-            if (!selected) { sale.text = canSell ? 'Sell the final copy to free its family slot.' : 'Sell from the map or a rest room.'; return; }
+            if (!selected) { sale.text = 'Tap a family to inspect its mastery.'; return; }
+            if (isElement(selected) && !run.mastery[selected]) { detail.text='LOCKED · Unlock this element as a room reward.'; copy.text=CARDS[selected].tip; evolution.text='Level 3 enables triple reactions.'; sale.text=''; return; }
             detail.text = cardDescription(selected,selectedId);
             detail.scale = Math.min(1, 60/Math.max(detail.text.length,1));
             const ids = run.deckIds.filter((_,index) => run.deck[index]===selected);
             if (!ids.includes(selectedId)) selectedId = ids[0] ?? -1;
-            copy.text = ids.length ? 'COPY '+(ids.indexOf(selectedId)+1)+'/'+ids.length+' · Lv '+cardLevel(selectedId)+' · Size '+cardSize(selected,selectedId)+' · '+cardRarity(selected) : 'No copies owned';
+            copy.text = ids.length ? 'COPY '+(ids.indexOf(selectedId)+1)+'/'+ids.length+' · Lv '+cardLevel(selectedId)+' · '+cardRarity(selected) : 'No copies owned';
             copy.scale = Math.min(1,75/Math.max(copy.text.length,1));
-            evolution.text = cardLevel(selectedId) >= 5 ? 'Maximum level.' : cardLevel(selectedId) === 2 ? 'Level 3 unlocks triples · size unchanged.' : evolutionEffect(selected);
+            const reactions = isElement(selected) ? ELEMENTS.filter(element=>element!==selected && run.mastery[element]>0).map(element=>reaction(selected,element)).filter((id):id is NonNullable<typeof id>=>Boolean(id)).map(id=>COMBOS[id].name) : [];
+            evolution.text = (reactions.length ? 'Reactions: '+reactions.join(' / ')+' · ' : '')+(cardLevel(selectedId) >= 5 ? 'Maximum mastery.' : cardLevel(selectedId) >= 3 ? 'Triple eligible.' : 'Triple reactions require Lv 3.');
             evolution.scale = Math.min(1,68/Math.max(evolution.text.length,1));
             sale.text = !canSell ? 'Sell from the map or a rest room.' : confirm ? 'Tap Sell again to confirm.' : 'Sale value: '+saleValue(selectedId)+' gold';
         };
         const button = (text:string,x:number,y:number,fn:()=>void) =>
             game.ui.button({ anchor:'top-left',x,y,h:66,z:90,text,onClick:fn });
         button('Next page',280,755,() => { page = (page+1)%Math.max(1,Math.ceil(types.length/6)); update(); });
-        button('Sort',55,755,()=>{sortMode=(sortMode+1)%4;refreshTypes();page=0;update();sale.text='Sort: '+['name','rarity','family','size'][sortMode];});
+        button('Sort',55,755,()=>{sortMode=(sortMode+1)%4;refreshTypes();page=0;update();sale.text='Sort: '+['name','rarity','family','casts'][sortMode];});
         button('Family',165,755,()=>{familyIndex++;refreshTypes();page=0;update();sale.text='Family: '+([...new Set(run.deck.map(cardFamily))][familyIndex-1] ?? 'all');});
         button('Relics',490,755,() => {
             const entries = run.relics.map(id => ({name:RELICS[id].name,tip:RELICS[id].tip}));
@@ -118,7 +122,7 @@ export const Deck = {
             if (!canSell || !selected || selectedId < 0) return;
             if ((cardLevel(selectedId) >= 3 || ['Rare','Epic','Mythical','Legendary','Cursed'].includes(cardRarity(selected))) && !confirm) { confirm=true; update(); return; }
             const result = sellCard(selectedId);
-            types = types.filter(card => run.deck.includes(card));
+            types = types.filter(card => isElement(card) || run.deck.includes(card));
             page = Math.min(page,Math.max(0,Math.ceil(types.length/6)-1));
             update();
             sale.text = result;

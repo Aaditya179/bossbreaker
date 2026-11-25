@@ -71,7 +71,7 @@ export function addDebugControls(): void {
         }
         return 'Added '+CARDS[id].name;
     });
-    add('card-level','Set a hand card level for testing','slot level',(slot,level)=>{const index=Math.max(0,Math.floor(Number(slot))-1),id=battle.handIds[index];if(id==null)return 'No card in slot';run.levels[id]=Math.max(1,Math.min(5,Math.floor(Number(level)||1)));return 'Card level '+run.levels[id];});
+    add('card-level','Set a hand card level for testing','slot level',(slot,level)=>{const index=Math.max(0,Math.floor(Number(slot))-1),id=battle.handIds[index];if(id==null)return 'No card in slot';const card=battle.hand[index];const value=Math.max(1,Math.min(5,Math.floor(Number(level)||1)));if(card && ['fire','frost','storm','wind','earth'].includes(card)) run.mastery[card as keyof typeof run.mastery]=value;else run.levels[id]=value;return 'Card level '+value;});
     add('give','Grant an item','item',name=>{
         const item = items.find(known=>known===name);
         return item ? grant(item) : 'Use '+items.join(', ');

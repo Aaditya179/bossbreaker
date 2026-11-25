@@ -3,14 +3,18 @@ import { game } from './engine.js';
 export const MAX_HP = 100;
 export const HAND_SIZE = 6;
 export const START_CAPACITY = 5;
+export const MAX_CASTS = 7;
+export const FAMILY_LIMIT = 3;
+export const STARTING_COPIES = 12;
+export const UNLOCK_COPIES = 4;
 export const ELEMENT_POWER_STEP = 3;
 export const EARTH_BLOCK_BASE = 8;
 export const EARTH_BLOCK_STEP = 2;
-export const cardLevel = (id: number | undefined): number => id === undefined ? 1 : (run.levels[id] ?? 1);
+export const cardLevel = (id: number | undefined): number => { const card = id === undefined ? undefined : run.deck[run.deckIds.indexOf(id)]; return card && isElement(card) ? Math.max(1, run.mastery[card] ?? 0) : id === undefined ? 1 : (run.levels[id] ?? 1); };
 export const ELEMENTS = ['fire','frost','storm','wind','earth'] as const;
 export type Element = typeof ELEMENTS[number];
 export const isElement = (card: Card | null): card is Element => card !== null && (ELEMENTS as readonly string[]).includes(card);
-export const cardSize = (card: Card, _id?: number): number => isElement(card) ? 1 : card === 'cleave' || card === 'sovereign' ? 3 : card === 'bulwark' || card === 'immolate' || card === 'riposte' ? 2 : 1;
+export const cardSize = (_card: Card, _id?: number): number => 1;
 export const cardFamily = (card: Card): string => isElement(card) ? card.toUpperCase() : card === 'slash' || card === 'dash' || card === 'cleave' || card === 'sovereign' || card === 'immolate' ? 'Sword' : card === 'guard' || card === 'dodge' || card === 'bulwark' ? 'Defense' : card === 'riposte' ? 'Counter' : 'Arcane';
 export type Rarity = 'Common'|'Uncommon'|'Rare'|'Epic'|'Mythical'|'Legendary'|'Cursed';
 export const CARD_RARITIES: Record<Card,Rarity> = {
@@ -108,7 +112,7 @@ function makeMap(): Node[] {
 export const run = {
     floor: 1, hp: MAX_HP, capacity: START_CAPACITY, maxHp: MAX_HP, powers: [] as string[], curses: [] as string[], deck: [...STARTER], deckIds: STARTER.map(newCardId), gold: 0,
     gearOwned: [] as string[], equipped: {weapon:null,head:null,chest:null,legs:null} as Record<'weapon'|'head'|'chest'|'legs',string|null>, shopStock: [] as string[], shopKey:'',
-    levels: {} as Record<number, number>,
+    levels: {} as Record<number, number>, mastery: {fire:1,frost:0,storm:0,wind:0,earth:0} as Record<Element,number>,
     relics: [] as number[], map: [] as Node[], path: [] as Node[],
     room: 'monster' as Room, node: null as Node | null,
     stats: { rooms: 0, bosses: 0, relics: 0, cards: 0, combos: 0, triples: 0 },
@@ -116,17 +120,18 @@ export const run = {
     cheats: { infiniteHealth: false, invincible: false, infinitePips: false, oneHit: false },
 };
 
-export function reset(floor = 1, tutorial = false): void {
+export function reset(floor = 1, tutorial = false, starting: Element = 'fire'): void {
+    const starter: Card[] = Array.from({length:STARTING_COPIES},()=>starting);
+    const mastery = Object.fromEntries(ELEMENTS.map(element=>[element,element===starting ? 1 : 0])) as Record<Element,number>;
     Object.assign(run, {
-        floor, hp: MAX_HP, capacity: START_CAPACITY + floor - 1, maxHp: MAX_HP, powers: [], curses: [], deck: [...STARTER], deckIds: STARTER.map(newCardId), gold: 0, gearOwned: [], equipped: {weapon:null,head:null,chest:null,legs:null}, shopStock: [], shopKey:'', levels: {}, relics: [], map: makeMap(),
+        floor, hp: MAX_HP, capacity: Math.min(MAX_CASTS,START_CAPACITY + floor - 1), maxHp: MAX_HP, powers: [], curses: [], deck: starter, deckIds: starter.map(newCardId), gold: 0, gearOwned: [], equipped: {weapon:null,head:null,chest:null,legs:null}, shopStock: [], shopKey:'', levels: {}, mastery, relics: [], map: makeMap(),
         path: [], node: null, room: 'monster', result: '', tutorial,
         stats: { rooms: (floor - 1) * 5, bosses: floor - 1, relics: 0, cards: 0, combos: (floor - 1) * 5, triples: 0 },
         cheats: { infiniteHealth: false, invincible: false, infinitePips: false, oneHit: false },
     });
     for (let i = 1; i < floor; i++) {
         grant('relic-charm');
-        grant('card-scroll');
-        upgrade(i === 1 ? 'fire' : 'earth');
+        upgrade(starting);
     }
 }
 
@@ -134,8 +139,20 @@ export function startRun(): void {
     const attempts = game.save.read('attempts', 0) + 1;
     game.save.write('attempts', attempts);
     game.rng.restore(game.rng.fork('run-'+attempts).snapshot());
-    reset(1, !game.save.read('tutorialSeen', false));
+    game.scenes.go('starting-element');
+}
+
+
+export function chooseStartingElement(element: Element): void {
+    reset(1, !game.save.read('tutorialSeen', false), element);
     game.scenes.go('map');
+}
+export function unlockElement(element: Element): boolean {
+    if (run.mastery[element] > 0 || ELEMENTS.filter(e=>run.mastery[e]>0).length >= FAMILY_LIMIT) return false;
+    run.mastery[element] = 1;
+    for (let i=0;i<UNLOCK_COPIES;i++) { run.deck.push(element); run.deckIds.push(newCardId()); }
+    run.stats.cards += UNLOCK_COPIES;
+    return true;
 }
 
 export function grant(item: Item, rare = false): string {
@@ -145,7 +162,7 @@ export function grant(item: Item, rare = false): string {
         return 'Heart Gem  ·  +' + healed + ' health';
     }
     if (item === 'card-scroll') {
-        const card = game.rng.pick(CARD_KEYS);
+        const card = game.rng.pick(CARD_KEYS.filter(card => !isElement(card) || run.mastery[card]>0));
         const id = addCard(card);
         if (id < 0) return 'No family slot available.';
         run.stats.cards++;
@@ -160,8 +177,7 @@ export function grant(item: Item, rare = false): string {
 }
 
 export function addCard(card: Card): number {
-    const families = new Set(run.deck.map(cardFamily));
-    if (families.size >= 5 && !families.has(cardFamily(card))) return -1;
+    if (isElement(card) && !run.mastery[card]) return -1;
     const id = newCardId();
     run.deck.push(card);
     run.deckIds.push(id);
@@ -176,7 +192,8 @@ export function upgrade(card: Card, id = run.deckIds[run.deck.indexOf(card)]): v
     if (id === undefined || run.deck[run.deckIds.indexOf(id)] !== card) return;
     const level = cardLevel(id);
     if (level >= 5) return;
-    run.levels[id] = level + 1;
+    if (isElement(card)) run.mastery[card] = level + 1;
+    else run.levels[id] = level + 1;
 }
 
 export function saleValue(id: number): number {
@@ -191,7 +208,7 @@ export function sellCard(id: number): string {
     if (index < 0 || run.deck.length <= MIN_DECK) return 'Keep at least eight cards.';
     const card = run.deck[index];
     const remaining = run.deck.filter((_,i) => i !== index);
-    if (!remaining.some(c => c === 'earth' || c === 'wind') || !remaining.some(c => isElement(c))) return 'Keep elemental offense and Earth or Wind.';
+    if (!remaining.includes(card)) return 'Keep at least one copy of each unlocked element.';
     const price = saleValue(id);
     run.deck.splice(index,1);
     run.deckIds.splice(index,1);
@@ -205,7 +222,7 @@ export function remove(card: Card, id = run.deckIds[run.deck.indexOf(card)]): bo
     if (run.deck[index] !== card) return false;
     if (index < 0 || run.deck.length <= MIN_DECK) return false;
     const remaining = run.deck.filter((_,i) => i !== index);
-    if (!remaining.some(c => c === 'earth' || c === 'wind') || !remaining.some(c => isElement(c))) return false;
+    if (!remaining.includes(card)) return false;
     run.deck.splice(index, 1);
     run.deckIds.splice(index, 1);
     delete run.levels[id];

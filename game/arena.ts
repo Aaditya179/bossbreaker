@@ -3,7 +3,7 @@ import { planReactions, type Reaction } from './elements.js';
 import { COMBOS, discover } from './combos.js';
 import { applyStatus, stacks, tickStatuses, type Status, type Statuses } from './status.js';
 import { game } from './engine.js';
-import { BOSSES, CARDS, EARTH_BLOCK_BASE, EARTH_BLOCK_STEP, ELEMENT_POWER_STEP, HAND_SIZE, PIPS, cardLevel, cardSize, relicCount, run, type Card, type Element } from './run.js';
+import { BOSSES, CARDS, EARTH_BLOCK_BASE, EARTH_BLOCK_STEP, ELEMENT_POWER_STEP, HAND_SIZE, MAX_CASTS, PIPS, cardLevel, cardSize, relicCount, run, type Card, type Element } from './run.js';
 
 export type Point = { x: number; y: number };
 export type CombatEvent = { kind:'card'|'damage'|'combo'|'status'|'block'|'enemy'|'defeat'|'echo'; text:string; amount?:number; target?:number; critical?:boolean; color?:string; phase?:Phase }; 
@@ -17,7 +17,7 @@ export const CRITICAL_MULTIPLIER = 1.5;
 export const LUCKY_OVERLOAD_CHANCE = 0.15;
 export const PHANTOM_EDGE_CHANCE = 0.12;
 const SPELL_SPEED = 1050;
-const HIT_WAIT = 0.24;
+const HIT_WAIT = 0.38;
 const DODGE_TIME = 0.95;
 const STAGE_TIME = 0.51;
 const UPGRADE_POWER = ELEMENT_POWER_STEP;
@@ -70,7 +70,7 @@ export const battle = {
     tutorial: false, moved: false, dodged: false, steamed: false,
     events: [] as CombatEvent[], planned: [] as (Reaction|null)[], rejectedId: -1, randomLog: [] as string[], note: '', resolving: '', last: null as Card | null, echo: false,
     castWait: 0, repeat: null as { card: Card; aim: number; reaction: Reaction | null; dashCombo: boolean } | null,
-    enemyTime: 0, enemyStage: 0, discardOnly: [] as number[], selected: [] as number[], redraw: 0, inspected: -1, sequence: [] as Card[], activeSlot: -1, target: 0, targets: {} as Record<number,number>, activeTarget: 0, activeCardId: -1, echoBonus: 0, sequenceIds: [] as number[], dodges: 0, ripostes: 0, ripostePowers: [] as number[], powerUsed: {} as Record<string,boolean>,
+    enemyTime: 0, enemyStage: 0, discardOnly: [] as number[], selected: [] as number[], redraw: 0, inspected: -1, sequence: [] as Card[], activeSlot: -1, target: 0, targets: {} as Record<number,number>, activeTarget: 0, activeCardId: -1, echoBonus: 0, sequenceIds: [] as number[], dodges: 0, ripostes: 0, ripostePowers: [] as {damage:number;burn:boolean}[], debuffWard:0, powerUsed: {} as Record<string,boolean>,
 };
 
 export function initBattle(single?: FoeId): void {
@@ -89,7 +89,7 @@ export function initBattle(single?: FoeId): void {
         phase: 'plan', turn: 1, pips: PIPS, barrier: 0, hand: [], queue: [], spent: [], effects: [], shots: [],
         zones: [], puddles: [], foes, draw: deck.map(entry => entry.card), drawIds: deck.map(entry => entry.id), handIds: [], spentIds: [], hero: { x: 360, y: 553 }, aim: -Math.PI / 2,
         tutorial, moved: false, dodged: false, steamed: false, cast: 0, events: [], planned: [], rejectedId: -1, randomLog: ['rng '+JSON.stringify(game.rng.snapshot())], note: '', resolving: '',
-        last: null, echo: false, castWait: 0, repeat: null, enemyTime: 0, enemyStage: 0, discardOnly: [], selected: [], redraw: 0, inspected: -1, sequence: [], activeSlot: -1, target: 0, targets: {}, activeTarget: 0, activeCardId: -1, echoBonus: 0, sequenceIds: [], dodges: 0, ripostes: 0, ripostePowers: [], powerUsed: {}, statuses: {},
+        last: null, echo: false, castWait: 0, repeat: null, enemyTime: 0, enemyStage: 0, discardOnly: [], selected: [], redraw: 0, inspected: -1, sequence: [], activeSlot: -1, target: 0, targets: {}, activeTarget: 0, activeCardId: -1, echoBonus: 0, sequenceIds: [], dodges: 0, ripostes: 0, ripostePowers: [], debuffWard:0, powerUsed: {}, statuses: {},
     });
     if (tutorial) {
         const opening: {card: Card; id: number}[] = [];
@@ -176,7 +176,7 @@ export function queueSelected(): boolean {
     }
     const size = battle.selected.reduce((sum, id) => sum + cardSize(battle.hand[cardIndex(id)]!,id), 0);
     if (usedCapacity() + size > maxCapacity()) {
-        battle.note = 'Selection exceeds remaining capacity.';
+        battle.note = 'Selection exceeds remaining casts.';
         return false;
     }
     battle.selected.sort((a,b) => cardIndex(a)-cardIndex(b));
@@ -215,9 +215,11 @@ function applyFoeStatus(foe:Foe,status:Status): void {
     applyStatus(foe.statuses,status);
     event({kind:'status',text:status.toUpperCase(),target:battle.foes.indexOf(foe),color:'#b3e7ff'});
 }
-function applyHeroStatus(status:Status): void {
+function applyHeroStatus(status:Status): boolean {
+    if (battle.debuffWard>0) { battle.debuffWard--; event({kind:'status',text:'DEBUFF RESISTED',color:'#a7e9ff'}); return false; }
     applyStatus(battle.statuses,status);
     event({kind:'status',text:status.toUpperCase(),color:'#ffad98'});
+    return true;
 }
 
 export function execute(): void {
@@ -333,23 +335,23 @@ function resolveReaction(combo:Reaction, hit:Foe, color:string): void {
       case 'steam': hitAll(7+relicCount(2)*8,'weaken'); break;
       case 'overload': hitAll(6+(lucky?5:0)); break;
       case 'firestorm': hitAll(6,'burn'); break;
-      case 'magma': block(12); battle.ripostes++; battle.ripostePowers.push(8); break;
+      case 'magma': battle.powerUsed.magmaArmor=true; block(12); battle.ripostes++; battle.ripostePowers.push({damage:8,burn:true}); break;
       case 'shatter': hurtFoe(hit,8,color,false); if(hit.hp>0)applyFoeStatus(hit,'armorBreak'); break;
       case 'blizzard': hitAll(5,'chill'); break;
-      case 'fortress': block(20); break;
-      case 'tempest': hurtFoe(hit,4,color,false); hurtFoe(hit,4,color,false); break;
-      case 'magnetic': block(10); battle.ripostes++; battle.ripostePowers.push(10); break;
+      case 'fortress': block(20); battle.debuffWard=1; break;
+      case 'tempest': hurtFoe(hit,4,color,false); { const other=area.find(foe=>foe!==hit && foe.hp>0); hurtFoe(other ?? hit,4,color,false); } break;
+      case 'magnetic': block(10); battle.ripostes++; battle.ripostePowers.push({damage:10,burn:false}); break;
       case 'sandstorm': battle.dodges=Math.max(1,battle.dodges); hitAll(5); break;
       case 'inferno': if(hit.hp>0)applyFoeStatus(hit,'burn'); break;
       case 'freeze': if(hit.hp>0)applyFoeStatus(hit,'chill'); break;
       case 'surge': hitAll(6); break;
       case 'cataclysm': hitAll(20,'burn'); break;
-      case 'bastion': block(35); battle.ripostes++; battle.ripostePowers.push(15); break;
+      case 'bastion': block(35); battle.ripostes++; battle.ripostePowers.push({damage:15,burn:false}); break;
       case 'meteorfall': hitAll(24,'burn'); break;
       case 'absolute': hurtFoe(hit,10,color,false); hurtFoe(hit,10,color,false); if(hit.hp>0){applyFoeStatus(hit,'chill');applyFoeStatus(hit,'weaken');} break;
     }
     const ingredients=battle.sequence.slice(Math.max(0,battle.activeSlot-(triple?2:1)),battle.activeSlot+1);
-    if(setCount('sentinel')>=3 && ingredients.includes('earth') && !battle.powerUsed.sentinelSet) { battle.powerUsed.sentinelSet=true; battle.ripostes++; battle.ripostePowers.push(6); event({kind:'combo',text:'SENTINEL COUNTER',target:index}); }
+    if(setCount('sentinel')>=3 && ingredients.includes('earth') && !battle.powerUsed.sentinelSet) { battle.powerUsed.sentinelSet=true; battle.ripostes++; battle.ripostePowers.push({damage:6,burn:false}); event({kind:'combo',text:'SENTINEL COUNTER',target:index}); }
     if(setCount('ember')>=3 && ingredients.includes('fire') && !battle.powerUsed.emberSet) { battle.powerUsed.emberSet=true; hurtFoe(hit,4,color,false); event({kind:'combo',text:'EMBER SET',target:index}); }
     if(relicCount(4) && ingredients.includes('earth') && !battle.powerUsed.knightRelic) {
         battle.powerUsed.knightRelic=true; block(8); if(hit.hp>0)applyFoeStatus(hit,'armorBreak');
@@ -369,7 +371,7 @@ function resolveReaction(combo:Reaction, hit:Foe, color:string): void {
     if(relicCount(8) && !battle.powerUsed.plagueRelic) { battle.powerUsed.plagueRelic=true; hurtFoe(hit,6,color,false); event({kind:'combo',text:'PLAGUEBOUND IDOL',target:index,color:'#cbe591'}); }
     effect(combo==='steam'?'steam':'ring',hit,color,{end:{x:triple?145:90,y:0},life:triple?0.85:0.6});
     burst(hit,color,true); game.sound.play(combo==='overload'||combo==='tempest'?'storm':'steam');
-    battle.castWait=Math.max(battle.castWait,triple?0.8:0.45);
+    battle.castWait=Math.max(battle.castWait,triple?0.8:0.65);
 }
 function land(shot: Shot, hit?: Foe): void {
     if (!hit) return;
@@ -412,7 +414,7 @@ function cast(card: Card, aim: number, empowered: boolean, combo: Reaction | nul
             event({kind:'block',text:'BLOCK GAINED',amount:power}); effect('ring',p,color); break;
         case 'riposte':
             battle.ripostes++;
-            battle.ripostePowers.push(power);
+            battle.ripostePowers.push({damage:power,burn:false});
             effect('ring',p,color);
             break;
         case 'guard':
@@ -506,7 +508,9 @@ function takeHit(zone: Zone): boolean {
     if ((avoided || blocked > 0) && battle.ripostes > 0 && zone.owner && zone.owner.hp > 0) {
         battle.ripostes--;
         event({kind:'combo',text:'RIPOSTE',target:battle.foes.indexOf(zone.owner),color:'#e1c5a8'});
-        hurtFoe(zone.owner,battle.ripostePowers.shift() ?? 14,'#e1c5a8',true);
+        const counter=battle.ripostePowers.shift() ?? {damage:14,burn:false};
+        hurtFoe(zone.owner,counter.damage,'#e1c5a8',true);
+        if(counter.burn && zone.owner.hp>0) applyFoeStatus(zone.owner,'burn');
         battle.note = 'RIPOSTE';
     }
     return !avoided;
@@ -523,15 +527,14 @@ function resolveStage(stage: number): void {
             const status = f.id === 'slime' && !battle.tutorial && !zone.puddle ? 'poison' :
                 f.id === 'archer' && battle.turn % 2 === 0 ? 'weaken' :
                 f.id === 'overlord' && battle.turn % 2 === 0 ? 'burn' : null;
-            if (status) { applyHeroStatus(status); if (status === 'weaken') battle.statuses[status]!.turns++; }
+            if (status && applyHeroStatus(status) && status === 'weaken') battle.statuses[status]!.turns++;
         }
         effect('ring', zone.kind === 'arc' ? along(zone, zone.ang, zone.r*0.65) : zone, zone.rune ? '#ce7af3' : '#ff6659', { end: { x: 72, y: 0 } });
         if (!f || resolved.has(f)) continue;
         resolved.add(f);
         if (hit && stage === 0 && battle.turn % 3 === 0 && (f.id === 'knight' || f.id === 'lich' || f.id === 'overlord')) {
             const status = f.id === 'knight' ? 'armorBreak' : f.id === 'lich' ? 'silence' : 'paralysis';
-            applyHeroStatus(status);
-            battle.statuses[status]!.turns++;
+            if (applyHeroStatus(status)) battle.statuses[status]!.turns++;
         }
         if (f.id === 'slime' && !zone.puddle) {
             if (walkable(zone, 18)) { f.x = zone.x; f.y = zone.y; }
@@ -552,7 +555,7 @@ function resolveStage(stage: number): void {
 
 export function winBattle(): void {
     if (battle.phase === 'clear') return;
-    if (run.room === 'boss') run.capacity++;
+    if (run.room === 'boss') run.capacity=Math.min(MAX_CASTS,run.capacity+1);
     run.gold += run.room === 'boss' ? 25 : run.room === 'cursed' ? 18 : 12;
     battle.foes.forEach(f => { if (f.hp > 0) burst(f,'#b69bdd',true); f.hp = 0; });
     battle.phase = 'clear';
@@ -643,6 +646,7 @@ export function stepBattle(dt: number): void {
         battle.dodges = 0;
         battle.ripostes = 0;
         battle.ripostePowers = [];
+        battle.debuffWard = 0;
         battle.spent.push(...battle.hand.filter((card): card is Card => card !== null));
         battle.spentIds.push(...battle.handIds.filter((id): id is number => id !== null));
         telegraph();

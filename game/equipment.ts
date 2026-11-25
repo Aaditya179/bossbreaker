@@ -32,7 +32,7 @@ export function unequipGear(slot:GearSlot):boolean {
 }
 export function shopInventory():string[] {
     const key=run.floor+':'+run.path.length;
-    if (run.shopKey!==key) { run.shopKey=key; run.shopStock=[...game.rng.shuffle(Object.keys(GEAR)).slice(0,3),...game.rng.shuffle([...ELEMENTS]).slice(0,3).map(card=>'card:'+card)]; }
+    if (run.shopKey!==key) { run.shopKey=key; run.shopStock=[...game.rng.shuffle(Object.keys(GEAR)).slice(0,3),...game.rng.shuffle(ELEMENTS.filter(element=>run.mastery[element]>0)).slice(0,3).map(card=>'card:'+card)]; }
     return run.shopStock;
 }
 export function buyGear(id:string):boolean {

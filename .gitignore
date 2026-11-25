@@ -4,3 +4,4 @@ phaser/
 game/shots/
 game/play/
 .phaser/
+.DS_Store
