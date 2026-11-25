@@ -14,6 +14,8 @@ try {
    await page.waitForTimeout(90);
  }
  const handX=[64,182,301,419,538,656];
+ async function drag(from,to) { await page.mouse.move(box.x+box.width*handX[from]/720,box.y+box.height*1071/1280); await page.mouse.down(); await page.mouse.move(box.x+box.width*handX[to]/720,box.y+box.height*1071/1280,{steps:8}); await page.mouse.up(); await page.waitForTimeout(150); }
+ async function mark(indices) { for(const i of indices) await tap(handX[i]+39,1110); }
  async function state(){return page.evaluate(()=>window.game.inspect().state.battle);}
  async function resetBattle(){
    await page.evaluate(()=>window.game.cheats.run('boss','1'));
@@ -44,7 +46,7 @@ try {
    assert.deepEqual((await state()).queue,[]);
    assert.deepEqual((await state()).selected,expected);
    if(count===3){
-     await tap(64,906);await tap(301,906);
+     await drag(0,2);
      const reordered=await state();
      assert.deepEqual(reordered.selected,[expected[1],expected[2],expected[0]]);
    }
@@ -60,7 +62,7 @@ try {
  const cost=card=>['fire','frost','storm','riposte'].includes(card)?2:card==='cleave'?3:1;
  const order=[2,0,1].filter(i=>b.hand[i]);
  if(order.reduce((sum,i)=>sum+cost(b.hand[i]),0)<=5){
-   const expected=order.map(i=>b.handIds[i]);
+   const expected=[...order].sort((a,b)=>a-b).map(i=>b.handIds[i]);
    await select(order);
    assert.deepEqual((await state()).selected,expected);
    console.log('PASS actual queue preserves selection order');
@@ -68,10 +70,10 @@ try {
  await resetBattle();
  b=await state();
  const old=[...b.handIds];
- await select([0,1,2,3,4,5]);await tap(540,1165);
+ await mark([0,1,2,3,4,5]);await tap(540,1165);
  b=await state();assert.equal(b.pips,2);assert.equal(b.hand.length,6);assert.ok(b.handIds.every(id=>!old.includes(id)));
  await assertInventory();
- console.log('PASS actual five-card discard for one action');
+ console.log('PASS actual six-card discard for one action');
  await resetBattle();
  b=await state();const initial=[...b.handIds];
  await select([0,1,1]);await tap(540,1165);
@@ -89,7 +91,7 @@ try {
  console.log('PASS actual discard budget persists and resets per battle');
  await resetBattle();
  for(let action=0;action<3;action++){
-   await select([0,1,2,3,4,5]);await tap(540,1165);await assertInventory();
+   await mark([0,1,2,3,4,5]);await tap(540,1165);await assertInventory();
  }
  b=await state();assert.equal(b.pips,0);assert.equal(b.hand.length,6);
  console.log('PASS actual redraw after pile exhaustion, unique IDs and zero budget');
@@ -101,7 +103,7 @@ try {
  await page.waitForTimeout(400);
  let owned=await page.evaluate(()=>window.game.inspect().state.run);
  const slashIds=owned.deckIds.filter((_,i)=>owned.deck[i]==='slash');
- await tap(360,235);await tap(159,1108);await tap(356,1108);
+ await tap(140,320);await tap(159,1108);await tap(356,1108);
  owned=await page.evaluate(()=>window.game.inspect().state.run);
  assert.ok(owned.deckIds.includes(slashIds[0]));
  assert.ok(!owned.deckIds.includes(slashIds[1]));
@@ -130,12 +132,15 @@ try {
  await tap(360,1238);
  await page.waitForFunction(()=>window.game.scenes.current==='reward');
  await page.waitForTimeout(300);
- await tap(360,590);
+ const bossLabels=await page.evaluate(()=>JSON.stringify(game.inspect().objects.map(o=>o.text).filter(Boolean)));
+ assert.ok(bossLabels.includes('Legendary') && bossLabels.includes('Mythical') && bossLabels.includes('Cursed'));
+ assert.ok(!bossLabels.includes('Reroll'));
+ await tap(360,590);await tap(360,590);
  await page.waitForFunction(()=>window.game.scenes.current==='map');
  owned=await page.evaluate(()=>window.game.inspect().state.run);
  assert.equal(owned.capacity,6);
- assert.ok(owned.powers.includes('knight'));
- console.log('PASS actual boss power choice and capacity upgrade');
+ assert.ok(owned.deck.includes('bulwark'));
+ console.log('PASS actual mythic boss card and capacity upgrade');
 
  await page.evaluate(()=>window.game.cheats.run('boss','2'));
  await page.waitForTimeout(400);
@@ -144,13 +149,13 @@ try {
  await tap(360,1238);
  await page.waitForFunction(()=>window.game.scenes.current==='reward');
  await page.waitForTimeout(300);
- await tap(360,820);
+ await tap(360,820);await tap(360,820);
  await page.waitForFunction(()=>window.game.scenes.current==='map');
  owned=await page.evaluate(()=>window.game.inspect().state.run);
  assert.equal(owned.capacity,7);
- assert.ok(owned.curses.includes('glassheart'));
- assert.equal(owned.maxHp,80);
- console.log('PASS actual cursed reward and disclosed max-health penalty');
+ assert.ok(owned.deck.includes('immolate'));
+ assert.equal(owned.maxHp,100);
+ console.log('PASS actual cursed boss card and disclosed health cost');
 
 
  async function injectedQueue(card,index) {
@@ -177,10 +182,10 @@ try {
  await injectedQueue('Frost Bolt',1);
  await page.evaluate(()=>window.game.cheats.run('give-card','Fireball'));
  await page.waitForTimeout(100);
- await select([2]);await tap(360,1238);
- b=await state();assert.equal(b.queue.length,0);assert.equal(b.selected.length,3);
+ await select([2]);
+ b=await state();assert.equal(b.queue.length,0);assert.equal(b.selected.length,2);
  const overflowText=await page.evaluate(()=>JSON.stringify(window.game.inspect().objects.map(o=>o.text).filter(Boolean)));
- assert.ok(overflowText.includes('OVER CAPACITY'));
+ assert.ok(overflowText.includes('Not enough Combo Capacity'));
  console.log('PASS actual over-capacity selection remains unqueued');
 
  await page.evaluate(()=>window.game.cheats.run('boss','2'));
@@ -198,7 +203,7 @@ try {
  await page.evaluate(()=>window.game.cheats.run('win-room'));
  await page.waitForTimeout(250);await tap(360,1238);
  await page.waitForFunction(()=>window.game.scenes.current==='reward');
- await page.waitForTimeout(300);await tap(360,360);
+ await page.waitForTimeout(300);await tap(360,360);await tap(360,360);
  await page.waitForFunction(()=>window.game.scenes.current==='map');
  owned=await page.evaluate(()=>window.game.inspect().state.run);
  assert.equal(owned.deck.length,beforeCardReward+1);
@@ -228,7 +233,7 @@ try {
  await page.waitForTimeout(350);
  runState=await page.evaluate(()=>window.game.inspect().state.run);
  const deckBefore=runState.deck.length, goldBefore=runState.gold;
- await tap(360,235);await tap(356,1108);
+ await tap(140,320);await tap(356,1108);
  runState=await page.evaluate(()=>window.game.inspect().state.run);
  assert.equal(runState.deck.length,deckBefore);
  assert.equal(runState.gold,goldBefore);

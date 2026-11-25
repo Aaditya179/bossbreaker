@@ -32,6 +32,7 @@ export function topButtons(pause = true): void {
     game.ui.muteButton({ ...position, x: -26, onClick: () => game.save.write('muted', game.sound.muted) });
     if (pause) {
         game.ui.pauseButton({ ...position, x: -89 });
+        game.ui.button({ anchor:'top-right',x:-26,y:155,h:48,text:'Combos',id:'combos-button',onClick:()=>game.scenes.push('elements') });
         game.ui.button({ ...position, x:-270, text:'Status', id:'status-button', onClick:() => game.scenes.push('statuses') });
         game.ui.button({ ...position, x:-168, text:'Deck', id:'deck-button', onClick:() => game.scenes.push('deck') });
     }

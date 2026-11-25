@@ -1,5 +1,7 @@
 import { game } from './engine.js';
-import { CARDS } from './run.js';
+import { CARDS, cardRarity, type Card } from './run.js';
+import { RARITY_COLORS } from './ui/cards.js';
+// from './run.js';
 
 type Ctx = CanvasRenderingContext2D;
 const rect = (c: Ctx, x: number, y: number, w: number, h: number, fill: string): void => {
@@ -125,7 +127,7 @@ function armor(c: Ctx, variant: string): void {
 
 function icon(c: Ctx, id: string, color: string): void {
     const dark = '#241e2f', shine = '#fff1d4';
-    if (id === 'guard' || id === 'riposte') {
+    if (id === 'guard' || id === 'riposte' || id === 'bulwark') {
         poly(c,dark,[4,4,12,1,20,4,21,13,16,21,12,24,8,21,3,13]);
         poly(c,color,[5,5,12,3,19,5,19,13,15,19,12,21,8,18,5,13]);
         poly(c,'#70877f',[12,6,17,7,17,13,14,17,12,18]);
@@ -228,7 +230,15 @@ export function paintArt(): void {
     for (const [id,card] of Object.entries(CARDS)) {
         game.paint('icon-'+id,72,72,c => {c.scale(3,3);icon(c,id,card.color);});
         game.paint('card-'+id,120,146,c => {
-            frame(c,120,146,'#211c2e',card.color);
+            frame(c,120,146,'#211c2e',RARITY_COLORS[cardRarity(id as Card)]);
+            const rarity=cardRarity(id as Card), accent=RARITY_COLORS[rarity];
+            rect(c,14,13,92,2,accent+'88');
+            if (rarity!=='Common') { rect(c,8,22,3,15,accent); rect(c,109,22,3,15,accent); }
+            if (['Rare','Epic','Mythical','Legendary','Cursed'].includes(rarity)) { poly(c,accent,[60,5,65,10,60,15,55,10]); }
+            if (['Epic','Mythical','Legendary'].includes(rarity)) { rect(c,18,126,22,2,accent); rect(c,80,126,22,2,accent); }
+            if (rarity==='Legendary') { rect(c,16,17,88,2,accent); rect(c,20,130,80,2,accent); }
+            if (rarity==='Mythical') { rect(c,14,20,32,2,'#9be7ff'); rect(c,75,123,30,2,'#ffc0f4'); }
+            if (rarity==='Cursed') { poly(c,'#8a1835',[6,34,14,27,10,43,19,37,8,58]); poly(c,'#8a1835',[114,65,105,75,110,80,102,93,114,88]); }
             rect(c,13,37,94,65,'#100e1b');
             rect(c,13,99,94,2,card.color+'77');
         });
@@ -244,6 +254,9 @@ export function paintArt(): void {
 
 export function defineSounds(): void {
     game.sound.defineAll({
+        sovereign: { type:'noise',duration:0.2,volume:0.25 },
+        immolate: { type:'sawtooth',freq:220,freqEnd:80,duration:0.18,volume:0.2 },
+        bulwark: { type:'triangle',notes:[400,700,900],duration:0.22,volume:0.2 },
         select: { type: 'triangle', freq: 520, freqEnd: 660, duration: 0.075, volume: 0.22 },
         draw: { type: 'triangle', notes: [360,540,650], duration: 0.14, volume: 0.23 },
         shuffle: { type: 'noise', duration: 0.16, volume: 0.19 },
@@ -258,6 +271,7 @@ export function defineSounds(): void {
         fire: { type: 'sawtooth', freq: 210, freqEnd: 73, duration: 0.21, volume: 0.24 },
         storm: { type:'square', notes:[440,880,660], duration:0.18, volume:0.18 },
         echo: { type: 'square', notes: [340,680,510,1020], duration: 0.32, volume: 0.12 },
+        critical: { type:'square', notes:[330,660,990], duration:0.16, volume:0.16 },
         hit: { type: 'triangle', freq: 174, freqEnd: 72, duration: 0.13, volume: 0.42 },
         ouch: { type: 'square', freq: 154, freqEnd: 63, duration: 0.21, volume: 0.23 },
         enemy: { type: 'noise', duration: 0.27, filter: { type: 'lowpass', freq: 900, freqEnd: 160 }, volume: 0.25 },

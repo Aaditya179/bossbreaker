@@ -24,7 +24,7 @@ export const Map = {
         backdrop();
         floorHeading('DUNGEON MAP   /   FLOOR 0'+run.floor, ['Sunken Crypt','Frostbound Vaults','Abyssal Sanctum'][run.floor-1]);
         topButtons();
-        label('Choose a connected room and climb toward the crown.',40,164,23,LOW,'sans-bold','left');
+        label('Choose a connected room.',40,164,23,LOW,'sans-bold','left');
         const floor = sprite('panel',360,638,656,0,'map-panel');
         floor.height = 833;
         const grid = game.graphics({ layer: 'hud' });
@@ -56,6 +56,8 @@ export const Map = {
             label(passed ? 'CLEARED' : active ? 'ENTER' : ROOMS[node.room].toUpperCase(),x,y+34,15,active ? GOLD : LOW,'mono-bold');
             if (active) label(node.room === 'boss' ? BOSSES[run.floor-1] : ROOMS[node.room],x,y+73,20);
         }
+        game.ui.button({anchor:'bottom',x:-140,y:-220,h:64,text:'Shop',onClick:()=>game.scenes.push('shop')});
+        game.ui.button({anchor:'bottom',x:140,y:-220,h:64,text:'Equipment',onClick:()=>game.scenes.push('equipment')});
         sprite('icon-heart',72,1123,32);
         label(run.hp+' / '+run.maxHp,98,1123,25,INK,'mono-bold','left');
         label(run.deck.length+' cards',357,1123,23,INK,'mono-bold');

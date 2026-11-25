@@ -1,3 +1,4 @@
+import { resetDiscoveries } from './combos.js';
 import { game } from './engine.js';
 import { battle, FOES, initBattle, winBattle } from './arena.js';
 import { addCard, CARDS, endRun, grant, MAX_HP, PIPS, reset, run, type Card, type Item, type Room } from './run.js';
@@ -28,6 +29,7 @@ export function addDebugControls(): void {
             return action(...parts);
         } });
     };
+    add('reset-combos','Reset combo discoveries','',()=>{resetDiscoveries();return 'Combo discoveries reset';});
     add('level','Jump to a floor map','n',n=>{reset(floor(n));game.scenes.go('map');return 'Floor '+run.floor;});
     add('boss','Jump to a floor boss','n',n=>{reset(floor(n));arena('boss');return 'Boss on floor '+run.floor;});
     add('room','Open a room on this floor','type',name=>{
@@ -73,6 +75,7 @@ export function addDebugControls(): void {
         const item = items.find(known=>known===name);
         return item ? grant(item) : 'Use '+items.join(', ');
     });
+    add('gold','Set run gold for testing','amount',amount=>{run.gold=Math.max(0,Math.floor(Number(amount)||0));return 'Gold '+run.gold;});
     add('heal','Restore full health','',()=>{run.hp=run.maxHp;return 'Health restored';});
     add('discard-pips','Refill three discard pips','',()=>{battle.pips=PIPS;return 'Pips restored';});
     const toggles = {'infinite-health':'infiniteHealth','invincible':'invincible','infinite-pips':'infinitePips','one-hit-kills':'oneHit'} as const;

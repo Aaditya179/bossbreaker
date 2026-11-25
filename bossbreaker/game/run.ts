@@ -4,10 +4,18 @@ export const MAX_HP = 100;
 export const HAND_SIZE = 6;
 export const START_CAPACITY = 5;
 export const cardLevel = (id: number | undefined): number => id === undefined ? 1 : (run.levels[id] ?? 1);
-export const cardSize = (card: Card, id?: number): number => (card === 'cleave' ? 3 : card === 'frost' || card === 'fire' || card === 'storm' || card === 'riposte' ? 2 : 1) + (cardLevel(id ?? run.deckIds[run.deck.indexOf(card)]) >= 3 ? 1 : 0);
-export const cardFamily = (card: Card): string => card === 'slash' || card === 'dash' || card === 'cleave' ? 'Sword' : card === 'guard' || card === 'dodge' ? 'Defense' : card === 'riposte' ? 'Counter' : card === 'echo' ? 'Arcane' : card === 'storm' ? 'Storm' : 'Elemental';
-export const cardRarity = (card: Card): string => card === 'cleave' ? 'Rare' : card === 'storm' ? 'Uncommon' : 'Common';
+export const cardSize = (card: Card, id?: number): number => (card === 'cleave' || card === 'sovereign' ? 3 : card === 'bulwark' || card === 'immolate' ? 2 : card === 'frost' || card === 'fire' || card === 'storm' || card === 'riposte' ? 2 : 1) + (cardLevel(id ?? run.deckIds[run.deck.indexOf(card)]) >= 3 ? 1 : 0);
+export const cardFamily = (card: Card): string => card === 'slash' || card === 'dash' || card === 'cleave' || card === 'sovereign' || card === 'immolate' ? 'Sword' : card === 'guard' || card === 'dodge' || card === 'bulwark' ? 'Defense' : card === 'riposte' ? 'Counter' : card === 'echo' ? 'Arcane' : card === 'storm' ? 'Storm' : 'Elemental';
+export type Rarity = 'Common'|'Uncommon'|'Rare'|'Epic'|'Mythical'|'Legendary'|'Cursed';
+export const CARD_RARITIES: Record<Card,Rarity> = {
+    slash:'Common', dash:'Common', guard:'Common', frost:'Uncommon', fire:'Uncommon', dodge:'Uncommon',
+    storm:'Rare', riposte:'Rare', cleave:'Epic', echo:'Epic', bulwark:'Mythical', sovereign:'Legendary', immolate:'Cursed',
+};
+export const cardRarity = (card: Card): Rarity => CARD_RARITIES[card];
+export const RARITY_WEIGHTS: Record<Rarity,number> = {Common:16,Uncommon:8,Rare:4,Epic:2,Mythical:1,Legendary:1,Cursed:1};
+export const rewardWeight = (card: Card): number => RARITY_WEIGHTS[cardRarity(card)];
 export const evolutionEffect = (card: Card): string => ({
+    sovereign:'Sovereign strike gains damage.', bulwark:'Bulwark gains barrier.', immolate:'Blood blade gains damage.',
     slash:'Slash gains damage.', cleave:'Cleave also Weakens surviving targets.',
     dash:'Dash Strike gains damage.', frost:'Frost Bolt adds another Chill.',
     fire:'Fireball adds another Burn.', storm:'Storm Bolt chains to other foes.',
@@ -21,6 +29,9 @@ const BOSS_HEAL = 18;
 const MIN_DECK = 8;
 
 export const CARDS = {
+    sovereign: { name:'Sovereign Strike', color:'#ffd36f', kind:'SWORD', action:'38 break', tip:'38 damage and Armor Break.', power:38 },
+    immolate: { name:'Blood Blade', color:'#f36a80', kind:'SWORD', action:'34 / lose 5 HP', tip:'34 damage. Lose 5 HP, but cannot defeat yourself.', power:34 },
+    bulwark: { name:'Aegis Veil', color:'#e9a1f6', kind:'DEFENSE', action:'35 block + evade', tip:'Gain 35 barrier and evade the next hit.', power:35 },
     slash: { name: 'Slash', color: '#ff756d', kind: 'SWORD', action: '22 cleave', tip: '22 damage. After Dash Strike, 30 damage to all foes.', power: 22 },
     cleave: { name:'Cleave', color:'#ff9c87', kind:'SWORD', action:'26 all foes', tip:'Deal 26 damage to all enemies, or 34 to a lone enemy.', power:26 },
     dash: { name: 'Dash Strike', color: '#a6cfdf', kind: 'STYLE', action: '17 lunge', tip: '17 damage. Follow with Slash to cleave all foes.', power: 17 },
@@ -44,6 +55,7 @@ export const RELICS = [
     { name: 'Cinder Seal', tip: 'Fireballs deal 5 more damage.' },
     { name: 'Glacier Eye', tip: 'Frost Bolts deal 5 more damage.' },
     { name: 'Vapor Knot', tip: 'Steam Bursts deal 8 more damage.' },
+    { name: 'Phantom Edge', tip: '12% chance to repeat a sword strike at half strength; no chaining.' },
 ];
 
 export type Node = { room: Room; row: number; lane: number };
@@ -69,6 +81,7 @@ function makeMap(): Node[] {
 
 export const run = {
     floor: 1, hp: MAX_HP, capacity: START_CAPACITY, maxHp: MAX_HP, powers: [] as string[], curses: [] as string[], deck: [...STARTER], deckIds: STARTER.map(newCardId), gold: 0,
+    gearOwned: [] as string[], equipped: {weapon:null,head:null,chest:null,legs:null} as Record<'weapon'|'head'|'chest'|'legs',string|null>, shopStock: [] as string[], shopKey:'',
     levels: {} as Record<number, number>,
     relics: [] as number[], map: [] as Node[], path: [] as Node[],
     room: 'monster' as Room, node: null as Node | null,
@@ -79,7 +92,7 @@ export const run = {
 
 export function reset(floor = 1, tutorial = false): void {
     Object.assign(run, {
-        floor, hp: MAX_HP, capacity: START_CAPACITY + floor - 1, maxHp: MAX_HP, powers: [], curses: [], deck: [...STARTER], deckIds: STARTER.map(newCardId), gold: 0, levels: {}, relics: [], map: makeMap(),
+        floor, hp: MAX_HP, capacity: START_CAPACITY + floor - 1, maxHp: MAX_HP, powers: [], curses: [], deck: [...STARTER], deckIds: STARTER.map(newCardId), gold: 0, gearOwned: [], equipped: {weapon:null,head:null,chest:null,legs:null}, shopStock: [], shopKey:'', levels: {}, relics: [], map: makeMap(),
         path: [], node: null, room: 'monster', result: '', tutorial,
         stats: { rooms: (floor - 1) * 5, bosses: floor - 1, relics: 0, cards: 0, combos: (floor - 1) * 5 },
         cheats: { infiniteHealth: false, invincible: false, infinitePips: false, oneHit: false },
@@ -143,7 +156,7 @@ export function upgrade(card: Card, id = run.deckIds[run.deck.indexOf(card)]): v
 export function saleValue(id: number): number {
     const card = run.deck[run.deckIds.indexOf(id)];
     if (!card) return 0;
-    return (cardRarity(card) === 'Rare' ? 20 : cardRarity(card) === 'Uncommon' ? 15 : 10) + (cardLevel(id)-1)*5;
+    return ({Common:10,Uncommon:15,Rare:20,Epic:25,Mythical:30,Legendary:35,Cursed:30})[cardRarity(card)] + (cardLevel(id)-1)*5;
 }
 
 export function sellCard(id: number): string {

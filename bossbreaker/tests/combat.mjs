@@ -3,22 +3,23 @@ import { build } from '../phaser/node_modules/esbuild/lib/main.js';
 
 const mockEngine = `
 let seed = 42;
+const saved = {};
 export const game = {
   rng: {
     shuffle(cards) { for (let i = cards.length - 1; i > 0; i--) { seed = (seed * 1664525 + 1013904223) >>> 0; const j = seed % (i + 1); [cards[i], cards[j]] = [cards[j], cards[i]]; } return cards; },
-    chance() { return false; }, pick(items) { return items[0]; }, weighted(items) { return items[0][0]; },
-    fork() { return this; }, snapshot() { return [1,2,3,4]; }, restore(state) { seed = state[0] >>> 0; }
+    forced: false, forcedProbability: -1, useSeed: false, chance(p) { if (this.useSeed) { seed = (seed*1664525+1013904223)>>>0; return seed/4294967296 < p; } return this.forced || this.forcedProbability === p; }, pick(items) { return items[0]; }, weighted(items) { return items[0][0]; },
+    fork() { return this; }, snapshot() { return [seed,2,3,4]; }, restore(state) { seed = state[0] >>> 0; }
   },
   sound: { play() {} },
   particles: { burst() {} },
   feel: { shake() {} },
-  save: { read(_key, fallback) { return fallback; }, write() {} },
+  save: { read(key, fallback) { return saved[key] ?? fallback; }, write(key, value) { saved[key] = value; } },
   scenes: { go() {} }
 };
 `;
 const result = await build({
     stdin: {
-        contents: "export { game } from './game/engine.js'; export * from './game/arena.ts'; export { run, reset, upgrade, addCard, cardSize, cardFamily, completeRoom, sellCard } from './game/run.ts'; export { reaction } from './game/elements.ts'; export { applyStatus, stacks, tickStatuses } from './game/status.ts';",
+        contents: "export { game } from './game/engine.js'; export * from './game/arena.ts'; export { run, reset, upgrade, addCard, cardSize, cardFamily, rewardWeight, completeRoom, sellCard } from './game/run.ts'; export { reaction } from './game/elements.ts'; export { discoveries, resetDiscoveries } from './game/combos.ts'; export { applyStatus, stacks, tickStatuses } from './game/status.ts'; export { GEAR, gearBonus, setCount, shopInventory, buyGear, sellGear, equipGear, unequipGear } from './game/equipment.ts';",
         resolveDir: process.cwd(), loader: 'ts',
     },
     bundle: true, write: false, platform: 'node', format: 'esm',
@@ -31,7 +32,7 @@ const result = await build({
     }],
 });
 const moduleUrl = 'data:text/javascript;base64,' + Buffer.from(result.outputFiles[0].text).toString('base64');
-const { game, battle, run, reset, initBattle, discard: discardIds, queueCard, queueSelected, execute, stepBattle, upgrade, addCard, cardSize, cardFamily, completeRoom, sellCard, reaction, applyStatus, stacks, tickStatuses } = await import(moduleUrl);
+const { game, battle, run, reset, initBattle, discard: discardIds, queueCard, queueSelected, execute, stepBattle, upgrade, addCard, cardSize, cardFamily, rewardWeight, completeRoom, sellCard, reaction, discoveries, resetDiscoveries, applyStatus, stacks, tickStatuses, GEAR, gearBonus, setCount, shopInventory, buyGear, sellGear, equipGear, unequipGear } = await import(moduleUrl);
 
 function start() {
     reset(1, false);
@@ -191,18 +192,12 @@ test('guard survives until enemy and expires afterwards', () => {
     act([0]);
     assert.ok(run.hp < 100);
 });
-test('fire and frost react consistently in either order', () => {
-    start();
-    configureHand(['frost','fire','slash','guard','dash']);
-    act([0,1]);
-    const forward = battle.foes[0].hp;
-    const forwardCombos = run.stats.combos;
-    start();
-    configureHand(['frost','fire','slash','guard','dash']);
-    act([1,0]);
-    assert.equal(forward,battle.foes[0].hp);
-    assert.equal(forwardCombos,run.stats.combos);
-    assert.equal(forwardCombos,1);
+test('fire and frost produce distinct ordered reactions', () => {
+    start(); configureHand(['frost','fire','slash','guard','dash']); act([0,1]);
+    const thermal = battle.foes[0].hp;
+    start(); configureHand(['fire','frost','slash','guard','dash']); act([0,1]);
+    assert.notEqual(thermal,battle.foes[0].hp);
+    assert.equal(run.stats.combos,1);
 });
 test('boss defeat stops the rest of the combo and enemy response', () => {
     start();
@@ -216,11 +211,101 @@ test('boss defeat stops the rest of the combo and enemy response', () => {
     assert.equal(battle.queue.length,0);
 });
 
-test('six two-element reactions are order-independent', () => {
-    for (const [a,b,expected] of [['fire','frost','steam'],['fire','storm','overload'],['frost','storm','shatter'],['fire','fire','inferno'],['frost','frost','freeze'],['storm','storm','surge']]) {
+test('elemental pairs follow their defined order', () => {
+    assert.equal(reaction('fire','frost'),'steam');
+    assert.equal(reaction('frost','fire'),'thermal');
+    for (const [a,b,expected] of [['fire','storm','overload'],['frost','storm','shatter'],['fire','fire','inferno'],['frost','frost','freeze'],['storm','storm','surge']]) {
         assert.equal(reaction(a,b),expected);
         assert.equal(reaction(b,a),expected);
     }
+});
+test('critical hits are optional and apply once to direct damage', () => {
+    start(); configureHand(['slash','guard','fire','dash','echo']); act([0]);
+    assert.equal(battle.foes[0].hp,158);
+    start(); configureHand(['slash','guard','fire','dash','echo']); game.rng.forcedProbability=0.1; act([0]);
+    game.rng.forcedProbability=-1; assert.equal(battle.foes[0].hp,147);
+    assert.ok(battle.randomLog.includes('Critical slash'));
+});
+test('seeded combat rolls reproduce the same damage and events', () => {
+    const runOnce = () => {
+        start(); configureHand(['slash','guard','fire','dash','echo']);
+        game.rng.restore([12345]); game.rng.useSeed=true; act([0]); game.rng.useSeed=false;
+        return [battle.foes[0].hp, battle.randomLog.filter(x=>x.startsWith('Critical'))];
+    };
+    assert.deepEqual(runOnce(),runOnce());
+});
+test('lucky overload augments its guaranteed base reaction', () => {
+    start(); run.deck[run.deck.indexOf('echo')]='storm'; initBattle(); configureHand(['fire','storm','slash','guard','dash']);
+    act([0,1]); const normal=battle.foes[0].hp;
+    start(); run.deck[run.deck.indexOf('echo')]='storm'; initBattle(); configureHand(['fire','storm','slash','guard','dash']);
+    game.rng.forcedProbability=0.15; act([0,1]); game.rng.forcedProbability=-1;
+    assert.equal(battle.foes[0].hp,normal-5); assert.ok(battle.randomLog.includes('Lucky Overload'));
+});
+test('discoveries are recorded only after a reaction lands and survive runs', () => {
+    resetDiscoveries(); start(); configureHand(['fire','frost','slash','guard','dash']);
+    add(0); add(1); execute(); assert.deepEqual(discoveries(),[]);
+    tickUntil(()=>battle.phase==='plan' || battle.phase==='clear');
+    assert.ok(discoveries().includes('steam')); reset(1,false); assert.ok(discoveries().includes('steam'));
+});
+test('Phantom Edge repeats once without recursive triggers', () => {
+    start(); run.relics.push(3); configureHand(['slash','guard','fire','dash','echo']);
+    game.rng.forcedProbability=0.12; act([0]); game.rng.forcedProbability=-1;
+    assert.equal(battle.foes[0].hp,147); assert.equal(battle.randomLog.filter(e=>e.startsWith('Phantom Edge')).length,1);
+});
+test('reward weights favor common over rare cards', () => {
+    assert.ok(rewardWeight('slash') > rewardWeight('storm'));
+    assert.ok(rewardWeight('storm') > rewardWeight('cleave'));
+});
+test('presentation events record actual damage without applying it twice', () => {
+    start(); configureHand(['slash','slash','guard','fire','dash']);
+    const before=battle.foes[0].hp; add(0); add(1); execute();
+    tickUntil(()=>battle.phase==='enemy' || battle.phase==='clear');
+    const damage=battle.events.filter(e=>e.kind==='damage' && e.phase==='execute').reduce((n,e)=>n+e.amount,0);
+    assert.equal(damage,before-battle.foes[0].hp);
+    assert.deepEqual(battle.events.filter(e=>e.kind==='card').map(e=>e.text),['Slash','Slash']);
+});
+test('fast-forward fixed-step batching preserves combat results', () => {
+    const fight = (batch) => {
+        start(); configureHand(['fire','frost','guard','slash','dash']);
+        add(0); add(1); add(2); execute();
+        for (let i=0;i<600 && !['plan','clear','lost'].includes(battle.phase);i++)
+            for (let n=0;n<batch && !['plan','clear','lost'].includes(battle.phase);n++) stepBattle(1/60);
+        return {hp:run.hp,foe:battle.foes[0].hp,events:battle.events.map(e=>[e.kind,e.text,e.amount])};
+    };
+    assert.deepEqual(fight(1),fight(2));
+});
+test('equipment sets recalculate without stacking on repeated equips', () => {
+    reset(1,false); run.gearOwned=['blade','sentinel_helm','sentinel_mail','sentinel_greaves'];
+    assert.equal(equipGear('blade'),true); assert.equal(gearBonus('slash'),4);
+    assert.equal(equipGear('sentinel_helm'),true); assert.equal(equipGear('sentinel_mail'),true);
+    assert.equal(setCount('sentinel'),2); assert.equal(gearBonus('guard'),4);
+    assert.equal(equipGear('sentinel_greaves'),true); assert.equal(equipGear('sentinel_greaves'),true);
+    assert.equal(setCount('sentinel'),3); assert.equal(gearBonus('riposte'),6);
+    assert.equal(unequipGear('legs'),true); assert.equal(gearBonus('riposte'),0);
+});
+test('equipped weapons affect only their intended combat families', () => {
+    start(); run.gearOwned=['blade']; assert.equal(equipGear('blade'),true);
+    configureHand(['slash','fire','guard','dash','echo']); add(0); execute();
+    tickUntil(()=>battle.phase==='enemy'); assert.equal(battle.foes[0].hp,154);
+    start(); run.gearOwned=['wand']; assert.equal(equipGear('wand'),true);
+    configureHand(['fire','slash','guard','dash','echo']); add(0); execute();
+    tickUntil(()=>battle.phase==='enemy'); assert.equal(battle.foes[0].hp,157);
+});
+test('shop purchases and sales conserve gold and reject invalid transactions', () => {
+    reset(1,false); run.gold=100; const id=shopInventory()[0], price=GEAR[id].price;
+    assert.equal(buyGear(id),true); assert.equal(run.gold,100-price); assert.equal(buyGear(id),false);
+    assert.equal(equipGear(id),true); assert.equal(sellGear(id),false);
+    assert.equal(unequipGear(GEAR[id].slot),true); assert.equal(sellGear(id),true);
+    assert.equal(run.gold,100-price+Math.floor(price/2)); assert.equal(sellGear(id),false);
+});
+test('boss cards apply their displayed effects and costs', () => {
+    start(); assert.ok(addCard('sovereign')>0); initBattle(); configureHand(['sovereign','slash','guard','fire','dash']);
+    act([0]); assert.equal(battle.foes[0].hp,142); assert.ok(stacks(battle.foes[0].statuses,'armorBreak')>0);
+    start(); assert.ok(addCard('bulwark')>0); initBattle(); configureHand(['bulwark','slash','guard','fire','dash']);
+    act([0]); assert.equal(run.hp,100);
+    start(); assert.ok(addCard('immolate')>0); initBattle(); configureHand(['immolate','guard','slash','fire','dash']);
+    run.hp=3; add(0); execute(); tickUntil(()=>battle.phase==='enemy' || battle.phase==='clear');
+    assert.equal(run.hp,1); assert.equal(battle.foes[0].hp,146);
 });
 test('statuses stack to their cap and expire', () => {
     const values = {};

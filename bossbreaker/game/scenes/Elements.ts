@@ -1,27 +1,23 @@
 import { game } from '../engine.js';
-import { GOLD, INK, label } from '../ui/chrome.js';
+import { COMBOS, discovered, type ComboId } from '../combos.js';
+import { GOLD, INK, LOW, label } from '../ui/chrome.js';
 
 export const Elements = {
     name:'elements',
     enter(): void {
         game.ui.panel({anchor:'center',w:720,h:1280,z:110,safeArea:false,
             style:{fill:'#11101aff',radius:0,border:0,bevel:0,gloss:0,shadow:0}});
-        label('ELEMENTAL REACTIONS',360,90,34,GOLD,'serif-bold','center',111);
-        label('Play two elemental cards consecutively.',360,150,22,INK,'sans-bold','center',111);
-        label('Either order works. The second card also has its normal effect.',360,188,19,INK,'sans-bold','center',111);
-        const rows = [
-            ['FIRE + FROST  ·  STEAM','10 damage to each enemy and apply Weaken.'],
-            ['FIRE + STORM  ·  OVERLOAD','8 damage to each enemy.'],
-            ['FROST + STORM  ·  SHATTER','10 extra damage and apply Armor Break.'],
-            ['FIRE + FIRE  ·  INFERNO','Apply an additional Burn stack.'],
-            ['FROST + FROST  ·  DEEP FREEZE','Apply an additional Chill stack.'],
-            ['STORM + STORM  ·  STATIC SURGE','8 damage to each enemy.'],
-        ];
-        rows.forEach(([title,detail],i) => {
-            const y=285+i*130;
-            label(title,48,y,23,GOLD,'sans-bold','left',111);
-            label(detail,48,y+40,20,INK,'sans-bold','left',111);
+        label('COMBO COLLECTION',360,78,34,GOLD,'serif-bold','center',111);
+        label('Discover reactions by triggering them in battle.',360,132,20,INK,'sans-bold','center',111);
+        (Object.keys(COMBOS) as ComboId[]).forEach((id,i) => {
+            const item=COMBOS[id], known=discovered(id), y=195+i*116;
+            label(known ? (id === 'lunge' ? 'SWORD · ' : 'ELEMENT · ')+item.name.toUpperCase() : (id === 'lunge' ? 'SWORD' : 'ELEMENT')+' · UNDISCOVERED',48,y,23,known ? GOLD : LOW,'sans-bold','left',111);
+            if (known) {
+                label(item.recipe,48,y+32,20,INK,'sans-bold','left',111);
+                const detail=label(item.effect,48,y+61,19,LOW,'sans-bold','left',111);
+                detail.scale=Math.min(1,66/Math.max(1,item.effect.length));
+            } else label('Experiment with card order.',48,y+37,19,LOW,'sans-bold','left',111);
         });
-        game.ui.button({anchor:'bottom',y:-32,h:68,z:110,text:'Back',onClick:()=>game.scenes.pop()});
+        game.ui.button({anchor:'bottom',y:-30,h:68,z:110,text:'Back',onClick:()=>game.scenes.pop()});
     },
 };

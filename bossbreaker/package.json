@@ -27,6 +27,8 @@
     "idea": "node phaser/cli/bin/phaser-ae.mjs idea",
     "test": "node tests/combat.mjs",
     "test:mobile": "node tests/mobile.mjs",
-    "test:interactions": "node tests/interactions.mjs"
+    "test:interactions": "node tests/interactions.mjs",
+    "test:shop": "node tests/shop-mobile.mjs",
+    "test:rewards": "node tests/reward-reroll.mjs"
   }
 }

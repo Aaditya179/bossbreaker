@@ -35,13 +35,8 @@ try {
         await page.waitForFunction(() => window.game.scenes.current === 'play');
         await page.waitForTimeout(350);
         assert.equal((await state()).hand.length,6);
-        await tap(64,1071);
-        await tap(182,1071);
-        await tap(182,1071);
-        await tap(301,1071);
-        await tap(419,1071);
-        const texts = await page.evaluate(() => window.game.inspect().objects.map(o => o.text).filter(Boolean));
-        assert.ok(JSON.stringify(texts).includes('SELECTED 3'), 'selection count after deselection');
+        // Mark three cards for discard using each card's orange corner.
+        await tap(103,1110); await tap(221,1110); await tap(340,1110);
         await tap(540,1165);
         let battle = await state();
         assert.equal(battle.pips,2);
@@ -49,12 +44,16 @@ try {
         assert.equal(battle.draw.length,5);
         assert.equal(battle.spent.length,3);
         const first = battle.handIds[0], second = battle.handIds[1];
-        await tap(64,1071);
-        await tap(182,1071);
+        await tap(64,1071); await tap(182,1071);
         battle = await state();
-        assert.deepEqual((await state()).selected,[first,second]);
-        await tap(64,906);
-        await tap(182,906);
+        assert.deepEqual(battle.selected,[first,second]);
+        // Touch drag through the browser's touch events.
+        const client = await page.context().newCDPSession(page);
+        const sx=box.x+box.width*64/720, ex=box.x+box.width*182/720, y=box.y+box.height*1071/1280;
+        await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:sx,y}]});
+        await client.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:ex,y}]});
+        await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+        await page.waitForTimeout(150);
         assert.deepEqual((await state()).selected,[second,first]);
         const hero = (await state()).hero;
         await tap(360,1238);

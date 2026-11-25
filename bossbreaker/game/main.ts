@@ -11,14 +11,17 @@ import { Enemy } from './scenes/Enemy.js';
 import { Statuses } from './scenes/Statuses.js';
 import { Reward } from './scenes/Reward.js';
 import { Deck } from './scenes/Deck.js';
+import { preferences } from './ui/preferences.js';
+import { Shop, Equipment } from './scenes/Shop.js';
 import { Pause } from './scenes/Pause.js';
 
 paintArt();
 defineSounds();
 game.ui.theme = 'metal';
+game.sound.volume('sfx',preferences.sfxVolume);
 if (game.save.read('muted',false)) game.commands.mute();
 await game.assets.load(assets,{pack:'title'});
-for (const scene of [Title,Map,Play,Campfire,Treasure,End,Pause,Deck,Reward,Statuses,Elements,Enemy]) game.scenes.register(scene);
+for (const scene of [Title,Map,Play,Campfire,Treasure,End,Pause,Deck,Reward,Statuses,Elements,Enemy,Shop,Equipment]) game.scenes.register(scene);
 addDebugControls();
 await game.start();
 game.scenes.go('title');

@@ -1,3 +1,4 @@
+import { cardVisual } from '../ui/cards.js';
 import { game } from '../engine.js';
 import { CARDS, cardLevel, cardSize, completeRoom, evolutionEffect, grant, remove, run, startRun, upgrade, type Card } from '../run.js';
 import { backdrop, chapter, floorHeading, framedButton, GOLD, INK, label, LOW, menuInput, sprite, topButtons } from '../ui/chrome.js';
@@ -57,7 +58,7 @@ export const Campfire = {
         };
         let used = false;
         types.forEach((id,i) => {
-            const card = CARDS[id], x = 152+i%3*208, y = 510+Math.floor(i/3)*100;
+            const card = CARDS[id], x = 152+i%3*208, y = 510+Math.floor(i/3)*80;
             const choose = (): void => {
                 if (used) return;
                 selected = id;
@@ -67,7 +68,7 @@ export const Campfire = {
             };
             const art = game.spawn({ id:'camp-'+id, texture:'slot', x,y,width:173,height:94,layer:'hud',z:1,pointer:{ onTap: choose } });
             outlines.push(art);
-            sprite('icon-'+id,x,y-25,36,2);
+            const visual=cardVisual(x-59,y,42,'camp-card-'+id,2); visual.show(id,run.deckIds[run.deck.indexOf(id)]); visual.name.visible=false; visual.effect.visible=false; visual.rarity.visible=false;
             label(card.name,x,y+5,19,card.color);
             const count = () => run.deck.filter(c=>c===id).length+' in deck  ·  Lv '+cardLevel(run.deckIds[run.deck.indexOf(id)]);
             const subtitle = label(count(),x,y+30,15,LOW);

@@ -1,12 +1,17 @@
+import { discovered } from '../combos.js';
+import { preferences } from './preferences.js';
+import { cardVisual, RARITY_COLORS } from './cards.js';
+import { combatFeedback } from './feedback.js';
 import { reaction } from '../elements.js';
 import { stacks } from '../status.js';
 import { game } from '../engine.js';
-import { angle, battle, cardIndex, FOES, maxCapacity, usedCapacity, type Effect, type Point, type Zone } from '../arena.js';
-import { CARDS, MAX_HP, PIPS, cardLevel, cardSize, run } from '../run.js';
+import { angle, battle, cardIndex, FOES, maxCapacity, usedCapacity, type CombatEvent, type Effect, type Point, type Zone } from '../arena.js';
+import { CARDS, MAX_HP, PIPS, cardLevel, cardRarity, cardSize, run } from '../run.js';
 import { GOLD, HOT, INK, label, LOW, sprite } from './chrome.js';
 
 const TAU = Math.PI * 2;
 const SHORT_NAME: Record<keyof typeof CARDS,string> = {
+    sovereign:'Sovereign', immolate:'Blood Blade', bulwark:'Aegis',
     slash:'Slash', cleave:'Cleave', dash:'Dash', frost:'Frost', fire:'Fire',
     storm:'Storm', dodge:'Dodge', riposte:'Riposte', guard:'Guard', echo:'Echo',
 };
@@ -110,19 +115,12 @@ export function drawArena() {
     const capacityLabel = label('',360,832,17,GOLD,'mono-bold');
     const capacityBar = game.graphics({layer:'hud',x:360,y:850,width:480,height:20});
     capacityBar.handle.z = 2;
-    const hand = HAND_X.map((x,i) => ({
-        base: sprite('card-slash',x,HAND_Y,108,1,'hand-'+(i+1)),
-        icon: sprite('icon-slash',x,HAND_Y-4,46,2,'hand-icon-'+(i+1)),
-        name: label('',x,HAND_Y-46,21),
-        effect: label('',x,HAND_Y+49,15,INK),
-        badge: label('',x+38,HAND_Y-62,20,GOLD,'mono-bold'),
-    }));
-    const slots = SLOT_X.map((x,i) => ({
-        base: sprite('slot',x,SLOT_Y+20,108,1,'slot-'+(i+1)),
-        icon: sprite('icon-slash',x,SLOT_Y+12,45,2,'slot-icon-'+(i+1)),
-        name: label('',x,SLOT_Y+52,18),
-        number: label(String(i+1),x-33,SLOT_Y-16,17,LOW,'mono-bold'),
-    }));
+    const hand = HAND_X.map((x,i) => cardVisual(x,HAND_Y,108,'hand-'+(i+1)));
+    const slots = SLOT_X.map((x,i) => {
+        const view=cardVisual(x,SLOT_Y+20,88,'slot-'+(i+1),1);
+        view.discardMark.visible=false; view.inspectMark.visible=false;
+        return {base:view.base,icon:view.icon,name:view.name,number:view.badge,miniEffect:view.effect,rarity:view.rarity};
+    });
     const queueButton = sprite('button',180,1165,320,1,'queue-button');
     queueButton.height = 56;
     const queueText = label('Queue selected',180,1165,20);
@@ -134,10 +132,21 @@ export function drawArena() {
     const executeText = label('',360,ACTION_Y,23);
     const footer = label('',360,959,17,LOW);
 
+    const showFeedback = combatFeedback(foeStage);
+    let stageCombo: CombatEvent | undefined;
+    let comboAt = -10;
+    const handLift = HAND_X.map(()=>0);
+    let lastFrame = 0;
     let shownTurn = 0;
     let shownRedraw = 0;
     return (time: number, discardMode: boolean, focus: number, touch: boolean, stick: {x:number;y:number;dx:number;dy:number} | null, reward: string) => {
+        const delta = Math.min(0.1, Math.max(0,time-lastFrame)); lastFrame=time;
         const {phase} = battle;
+        const latestCombo = [...battle.events].reverse().find(e=>e.kind==='combo' || e.kind==='echo');
+        if (latestCombo !== stageCombo) { stageCombo=latestCombo; if (latestCombo) comboAt=time; }
+        const presentation = showFeedback(battle.events,phase,battle.sequence.length,time);
+        const shake = presentation.shake;
+        stage.handle.x = 360 + shake;
         const planning = phase === 'plan';
         const aiming = phase === 'execute' || phase === 'enemy';
         const clear = phase === 'clear';
@@ -150,9 +159,8 @@ export function drawArena() {
         turn.text = 'HAND  /  TURN '+battle.turn;
         counts.text = 'DRAW '+battle.draw.length+'  ·  SPENT '+battle.spent.length;
         const lunge = phase === 'execute' && (battle.resolving === 'Slash' || battle.resolving === 'Dash Strike')
-            ? Math.sin(Math.PI * battle.cast / 0.18) * 115 : 0;
-        actor.x = HERO_STAGE.x + lunge;
-        actor.y = HERO_STAGE.y + Math.sin(time*7)*2;
+            ? Math.sin(Math.PI * battle.cast / 0.18) * (preferences.reducedMotion ? 20 : 115) : 0;
+        if (!presentation.frozen) { actor.x = HERO_STAGE.x + lunge + shake; actor.y = HERO_STAGE.y + Math.sin(time*7)*2; }
         actor.sx = 1;
         actor.sy = 1 - battle.cast*0.7;
         enemies.forEach(({art,bar},i) => {
@@ -160,8 +168,7 @@ export function drawArena() {
             const visible = f.hp > 0 || f.flash > 0;
             art.visible = visible;
             const at = foeStage(i), size = foeStageSize(i);
-            art.x = at.x + Math.sin(time*74)*f.flash*27;
-            art.y = at.y + Math.sin(time*(f.id==='lich' ? 5 : 3)+i)*4;
+            if (!presentation.frozen) { art.x = at.x + shake + (preferences.reducedMotion ? 0 : Math.sin(time*74)*f.flash*27); art.y = at.y + Math.sin(time*(f.id==='lich' ? 5 : 3)+i)*4; }
             art.tint = f.flash > 0 ? '#ffffff' : stacks(f.statuses,'chill') ? '#a4deff' : '#ffffff';
             art.alpha = f.hp > 0 ? (f.flash > 0 && Math.sin(time*95)>0 ? 0.62 : 1) : f.flash*5;
             art.scale = 1 + f.flash*0.25;
@@ -207,23 +214,28 @@ export function drawArena() {
                 const current = order[i], previous = order[i-1];
                 if (!current || !previous) continue;
                 const combo = reaction(previous,current);
-                if (combo) previews.push(combo.toUpperCase() + (['steam','overload','surge'].includes(combo) ? ' · all foes' : ' · target'));
+                if (combo) previews.push((discovered(combo) ? combo.toUpperCase() : 'UNKNOWN REACTION') + (['steam','overload','surge'].includes(combo) ? ' · all foes' : ' · target'));
             }
-            if (order.some((card,i) => card === 'dash' && order[i+1] === 'slash')) previews.push('Lunging Cleave');
+            if (order.some((card,i) => card === 'dash' && order[i+1] === 'slash')) previews.push(discovered('lunge') ? 'Lunging Cleave' : 'Unknown sword combo');
             if (order.some((card,i) => card === 'echo' && order[i+1] && order[i+1] !== 'echo')) previews.push('Echo repeats the next card');
-            hint.text = previews.length ? previews.join('  ·  ') : 'Tap combo cards to reorder or retarget.';
+            hint.text = previews.length ? previews.join('  ·  ') : 'Drag to reorder · tap × for discard-only.';
         }
         else if (phase === 'enemy') hint.text = 'Guard absorbs damage until the response ends.';
         else hint.text = 'Your combo resolves automatically.';
 
         hint.scale = Math.min(1, 57 / Math.max(1,hint.text.length));
-        hand.forEach(({base,icon,name,effect,badge},i) => {
+        const held = planning ? game.input.pointers.find(p=>p.down && Math.abs(p.startY-HAND_Y)<74) : undefined;
+        const dragFrom = held ? HAND_X.findIndex(x=>Math.abs(x-held.startX)<55) : -1;
+        const dragTo = held && Math.abs(held.x-held.startX)>25 ? HAND_X.findIndex(x=>Math.abs(x-held.x)<59) : -1;
+        hand.forEach(({base,icon,name,effect,badge,discardMark,inspectMark,rarity},i) => {
             const id = battle.hand[i];
             const card = id ? CARDS[id] : null;
-            base.visible = icon.visible = name.visible = effect.visible = Boolean(card);
+            base.visible = icon.visible = name.visible = effect.visible = rarity.visible = Boolean(card);
             const selection = battle.selected.indexOf(battle.handIds[i]!);
             badge.text = selection >= 0 ? String(selection+1) : '';
             badge.visible = Boolean(card) && selection >= 0;
+            discardMark.visible = inspectMark.visible = Boolean(card) && planning;
+            discardMark.color = battle.discardOnly.includes(battle.handIds[i]!) ? '#ffd86c' : HOT;
             if (!id || !card) return;
             const queued = battle.queue.indexOf(battle.handIds[i]!);
             if (base.texture !== 'card-'+id) {
@@ -239,23 +251,41 @@ export function drawArena() {
                 game.tween.to(name,{y:HAND_Y-46},{duration:0.2+i*0.025});
                 game.tween.to(effect,{y:HAND_Y+49},{duration:0.2+i*0.025});
             }
+            let targetX=HAND_X[i];
+            if (held && dragFrom>=0 && dragTo>=0) {
+                if (i===dragFrom) targetX=held.x;
+                else if (dragFrom<dragTo && i>dragFrom && i<=dragTo) targetX=HAND_X[i-1];
+                else if (dragFrom>dragTo && i>=dragTo && i<dragFrom) targetX=HAND_X[i+1];
+            }
+            const ease=preferences.reducedMotion ? 1 : Math.min(1,delta*24);
+            base.x+=(targetX-base.x)*ease; const cx=base.x; icon.x=cx;name.x=cx;effect.x=cx;badge.x=cx+38;discardMark.x=cx+40;inspectMark.x=cx-36;rarity.x=cx;
+            const hover=planning && game.input.pointer && Math.abs(game.input.pointer.x-HAND_X[i])<54 && Math.abs(game.input.pointer.y-HAND_Y)<70;
+            const tilt=preferences.reducedMotion ? 0 : hover ? Math.max(-0.14,Math.min(0.14,(game.input.pointer!.x-HAND_X[i])/400)) : 0;
+            base.rot+=(tilt-base.rot)*ease; icon.rot=base.rot;
+            if (!dy) { const targetLift = i===dragFrom && dragTo>=0 ? 20 : selection >= 0 || battle.discardOnly.includes(battle.handIds[i]!) ? 12 : 0; handLift[i] += (targetLift-handLift[i])*(preferences.reducedMotion ? 1 : Math.min(1,delta*18)); const lift=handLift[i]; base.y=HAND_Y-lift; icon.y=HAND_Y-4-lift; name.y=HAND_Y-46-lift; effect.y=HAND_Y+49-lift; badge.y=HAND_Y-62-lift; discardMark.y=HAND_Y+39-lift; inspectMark.y=HAND_Y-55-lift; }
             base.alpha = alpha; icon.alpha = alpha;
-            base.tint = battle.selected.includes(battle.handIds[i]!) ? '#ffcf70' : focus === i ? '#9de8ff' : '#ffffff';
+            base.tint = battle.rejectedId === battle.handIds[i] ? '#ff4b4b' : battle.discardOnly.includes(battle.handIds[i]!) ? '#ff8b80' : battle.selected.includes(battle.handIds[i]!) ? '#ffcf70' : focus === i ? '#9de8ff' : '#ffffff';
             base.sy = battle.selected.includes(battle.handIds[i]!) ? 1.06 : 1;
             name.text = SHORT_NAME[id]; name.color = card.color;
+            rarity.text=cardRarity(id).toUpperCase(); rarity.y=HAND_Y+23-(handLift[i]||0); rarity.color=RARITY_COLORS[cardRarity(id)];
             const level = cardLevel(battle.handIds[i] ?? undefined);
             const amount = card.power + (level-1)*5;
-            const action = id === 'echo' ? 'Repeat' : id === 'dodge' ? 'Evade' : id === 'guard' ? amount+' block' :
+            const action = id === 'echo' ? 'Repeat' : id === 'dodge' ? 'Evade' : id === 'guard' || id === 'bulwark' ? amount+' block' :
                 id === 'riposte' ? amount+' counter' : amount+' dmg';
             effect.text = queued >= 0 ? 'Queued '+(queued+1) : action+' · '+cardSize(id,battle.handIds[i] ?? undefined);
         });
         shownTurn = battle.turn;
         shownRedraw = battle.redraw;
-        slots.forEach(({base,icon,name,number},i) => {
+        slots.forEach(({base,icon,name,number,miniEffect,rarity},i) => {
             const id = phase === 'execute' ? battle.sequence[i] : battle.hand[cardIndex(battle.selected[i])];
             base.visible = number.visible = Boolean(id);
-            base.texture = id ? 'slot-lit' : 'slot';
+            if (id) base.texture='card-'+id;
+            miniEffect.visible=rarity.visible=Boolean(id);
+            if (id) { miniEffect.text='SIZE '+cardSize(id,phase==='execute' ? battle.sequenceIds[i] : battle.selected[i]); rarity.text=cardRarity(id).toUpperCase(); rarity.color=RARITY_COLORS[cardRarity(id)]; }
             base.tint = focus === 5+i || (phase === 'execute' && i === battle.activeSlot && id) ? '#9de8ff' : '#ffffff';
+            const active=phase === 'execute' && i === battle.activeSlot && Boolean(id);
+            base.y=SLOT_Y+20-(active ? 15 : 0); icon.y=SLOT_Y+12-(active ? 15 : 0); name.y=SLOT_Y-17-(active ? 15 : 0); number.y=SLOT_Y+5-(active ? 15 : 0); miniEffect.y=SLOT_Y+59-(active ? 15 : 0); rarity.y=SLOT_Y+38-(active ? 15 : 0);
+            base.scale=active ? 1.08 : 1;
             number.color = id ? GOLD : LOW;
             number.text = id ? String(i+1)+' · '+cardSize(id,phase === 'execute' ? battle.sequenceIds[i] : battle.selected[i]) : String(i+1);
             icon.visible = Boolean(id);
@@ -266,7 +296,7 @@ export function drawArena() {
         const available = planning ? maxCapacity() - usedCapacity() : 0;
         const selectedSize = battle.selected.reduce((total,id) => total + cardSize(battle.hand[cardIndex(id)]!,id),0);
         queueButton.alpha = planning ? 1 : 0.48;
-        discardButton.alpha = planning && battle.pips && battle.selected.length ? 1 : 0.48;
+        discardButton.alpha = planning && battle.pips && (battle.selected.length+battle.discardOnly.length) ? 1 : 0.48;
         queueButton.setFrame(focus === 10 ? 1 : 0);
         discardButton.setFrame(focus === 11 ? 1 : 0);
         executeButton.setFrame(focus === 12 ? 1 : 0);
@@ -276,7 +306,7 @@ export function drawArena() {
             ? 'PLAY COMBO ('+battle.selected.length+' CARDS)'
             : phase === 'execute' ? battle.resolving : 'ENEMY TURN';
         executeButton.alpha = clear || planning && selectedSize > 0 && selectedSize <= maxCapacity() ? 1 : 0.45;
-        footer.text = planning ? 'SELECTED '+battle.selected.length+'  '+Object.entries(battle.statuses).map(([key,value])=>key+' '+value?.stacks).join(' ') : '';
+        footer.text = planning ? 'PLAY '+battle.selected.length+' · × DISCARD '+battle.discardOnly.length+'  '+Object.entries(battle.statuses).map(([key,value])=>key+' '+value?.stacks).join(' ') : '';
         capacityLabel.color = planning && selectedSize > maxCapacity() ? HOT : GOLD;
         capacityLabel.text = (planning && selectedSize > maxCapacity() ? 'OVER CAPACITY: REMOVE '+(selectedSize-maxCapacity())+' · ' : 'COMBO CAPACITY  ')+(planning ? selectedSize : battle.sequence.reduce((sum,card,i) => sum + cardSize(card,battle.sequenceIds[i]),0))+' / '+maxCapacity();
         capacityBar.clear();
@@ -323,6 +353,18 @@ export function drawArena() {
                 c.beginPath(); c.moveTo(previous.x,previous.y); c.lineTo(at.x,at.y); c.stroke();
                 circle(c,at.x,at.y,8,'#fff1cf',CARDS[s.card].color,0.95);
             });
+            if (stageCombo && time-comboAt < 0.48 && !preferences.reducedMotion) {
+                const at=foeStage(Math.max(0,stageCombo.target ?? 0)), age=(time-comboAt)/0.48;
+                c.save(); c.globalAlpha=Math.max(0,1-age); c.strokeStyle=stageCombo.color ?? '#ffdb91'; c.lineWidth=4;
+                if (stageCombo.text.includes('OVERLOAD') || stageCombo.text.includes('SURGE') || stageCombo.text.includes('SHATTER')) {
+                    for (let n=0;n<5;n++) { const y=at.y-75+n*32; c.beginPath(); c.moveTo(at.x-105,y); c.lineTo(at.x-50,y-16); c.lineTo(at.x-23,y+10); c.lineTo(at.x+20,y-15); c.lineTo(at.x+90,y); c.stroke(); }
+                } else if (stageCombo.text.includes('CLEAVE') || stageCombo.text.includes('RIPOSTE') || stageCombo.text.includes('ECHO')) {
+                    for (let n=0;n<3;n++) { c.beginPath(); c.arc(at.x,at.y,45+n*22+age*20,-1.3,1.3); c.stroke(); }
+                } else {
+                    for (let n=0;n<8;n++) { const a=n*TAU/8, r=35+age*100; c.beginPath(); c.moveTo(at.x+Math.cos(a)*r,at.y+Math.sin(a)*r); c.lineTo(at.x+Math.cos(a)*(r+25),at.y+Math.sin(a)*(r+25)); c.stroke(); }
+                }
+                c.restore();
+            }
             for (const fx of battle.effects) {
                 const at=stagePoint(fx);
                 const end = fx.kind === 'dash' && fx.end ? stagePoint(fx.end) : fx.end;
@@ -330,7 +372,7 @@ export function drawArena() {
             }
             c.restore();
         });
-        for (const fx of battle.effects) if (fx.text && !feedback.has(fx)) {
+        for (const fx of battle.effects) if (fx.text && !/^((CRIT )?\d+)$/.test(fx.text) && !feedback.has(fx)) {
             const at=stagePoint(fx);
             feedback.set(fx,label(fx.text,at.x,at.y-23,23,fx.color,'mono-bold','center',8));
         }
